@@ -52,6 +52,7 @@ each. Combine this damage.
 
 - **Python 3.10+**
 - **pdfplumber** (only required for PDF parsing)
+- **openpyxl** (only required for HTML reference table generation)
 
 ### Installation
 
@@ -104,6 +105,23 @@ The web UI runs a local server at `http://127.0.0.1:8742` using only the Python 
 
 You must supply your own source files in the `sources/` directory. The `output/` directory is created automatically during conversion.
 
+### Adversary Reference Table
+
+A standalone script that generates a self-contained HTML reference page from an Excel spreadsheet of adversary data. The output (`adversaries.html`) is a dark-themed, single-file web app you can open directly in a browser — no server required.
+
+**Features:**
+- Sortable columns (click any header)
+- Filter by tier, type, and difficulty (dropdowns), attack bonus and thresholds (exact match), or damage dice (substring match)
+- Global text search across all fields
+- Automatic linking of adversary names to their entries in [Old Gus's Daggerheart SRD](https://callmepartario.github.io/og-dhsrd/)
+
+```bash
+python3 generate_adversaries_html.py                           # Default: sources/daggerheart_adversaries.xlsx
+python3 generate_adversaries_html.py path/to/custom.xlsx       # Custom spreadsheet path
+```
+
+The spreadsheet must contain a sheet named `daggerheart_adversaries` with headers in the first row. The script fetches the SRD page at build time to resolve adversary links.
+
 ## Project Structure
 
 ```
@@ -114,6 +132,8 @@ dhadvconverter/
 ├── index.html                          # Web UI: Single-file browser interface
 ├── Start Converter (Mac).command       # macOS: Double-click launcher for web UI
 ├── Start Converter (Windows).bat       # Windows: Double-click launcher for web UI
+├── generate_adversaries_html.py        # Generates adversaries.html from Excel data
+├── adversaries.html                    # Generated: sortable/filterable adversary reference
 ├── _SAMPLE.md                          # Reference: standardized output format (SRD content)
 ├── models/
 │   └── adversary.py                    # Adversary, Attack, Feature dataclasses
@@ -128,16 +148,16 @@ dhadvconverter/
 ├── output/                             # Converted adversary files (gitignored)
 ├── utils/
 │   └── source_finder.py                # Source attribution lookup
-├── LICENSE                             # CC BY-SA 4.0
+├── LICENSE                             # GNU GPLv3
 ├── .gitignore
 └── requirements.txt
 ```
 
 ## License
 
-The **code** in this project (all `.py` files, documentation, and project configuration) is licensed under the [Creative Commons Attribution-ShareAlike 4.0 International License (CC BY-SA 4.0)](https://creativecommons.org/licenses/by-sa/4.0/). You are free to share and adapt the code, provided you give appropriate credit and distribute any derivative works under the same license. See [LICENSE](CC-BY-SA4.txt) for the full legal text.
+The **code** in this project (all `.py` files, documentation, and project configuration) is licensed under the [GNU General Public License v3.0 (GPLv3)](https://www.gnu.org/licenses/gpl-3.0.html). You are free to use, modify, and distribute this software, provided that any derivative works are also distributed under the GPLv3. See [LICENSE](LICENSE) for the full legal text.
 
-The **sample stat block** (`_SAMPLE.md`) contains Daggerheart SRD content used under the Darrington Press Community Gaming License (CGL). This content is not covered by the CC BY-SA 4.0 license — it remains © Darrington Press, and its use is governed by the CGL terms.
+The **sample stat block** (`_SAMPLE.md`) contains Daggerheart SRD content used under the Darrington Press Community Gaming License (CGL). This content is not covered by the GPLv3 license — it remains © Darrington Press, and its use is governed by the CGL terms.
 
 *This work includes material taken from the Daggerheart System Reference Document by Darrington Press. Daggerheart is © Darrington Press. All rights reserved.*
 
