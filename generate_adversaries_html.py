@@ -94,10 +94,16 @@ def build_srd_links(names: list[str], srd_slugs: set[str]) -> dict[str, str]:
 DROPDOWN_FILTERS = ["tier", "type", "difficulty"]
 
 # Numeric exact-match text input filters
-NUMERIC_FILTERS = ["atk_bonus", "low_threshold", "high_threshold"]
+NUMERIC_FILTERS = ["atk_bonus"]
+
+# Range filters (above / below / exactly comparison)
+RANGE_FILTERS = ["hp", "stress", "low_threshold", "high_threshold"]
 
 # Text substring-match text input filters
 TEXT_FILTERS = ["damage_dice"]
+
+# Columns to exclude from the output
+EXCLUDED_COLUMNS = ["battle_points"]
 
 
 def get_dropdown_options(headers: list[str], rows: list[dict]) -> dict:
@@ -114,11 +120,15 @@ def get_dropdown_options(headers: list[str], rows: list[dict]) -> dict:
 
 def generate_html(headers: list[str], rows: list[dict], srd_links: dict[str, str]) -> str:
     """Generate the complete HTML string."""
+    # Remove excluded columns
+    headers = [h for h in headers if h not in EXCLUDED_COLUMNS]
+
     filter_options = get_dropdown_options(headers, rows)
 
     # Only include filters for columns that actually exist
     dropdowns = [c for c in DROPDOWN_FILTERS if c in headers]
     numerics = [c for c in NUMERIC_FILTERS if c in headers]
+    ranges = [c for c in RANGE_FILTERS if c in headers]
     texts = [c for c in TEXT_FILTERS if c in headers]
 
     display_names = {h: h.replace("_", " ").title() for h in headers}
@@ -129,6 +139,7 @@ def generate_html(headers: list[str], rows: list[dict], srd_links: dict[str, str
     display_json = json.dumps(display_names)
     dropdowns_json = json.dumps(dropdowns)
     numerics_json = json.dumps(numerics)
+    ranges_json = json.dumps(ranges)
     texts_json = json.dumps(texts)
     srd_links_json = json.dumps(srd_links)
 
@@ -230,6 +241,21 @@ select {{
 
 .filter-input.text-filter {{
     width: 100px;
+}}
+
+.range-filter {{
+    display: flex;
+    gap: 0.25rem;
+}}
+
+.range-filter select {{
+    min-width: 55px;
+    padding: 0.5rem 0.3rem;
+    font-size: 0.8rem;
+}}
+
+.range-filter .filter-input {{
+    width: 65px;
 }}
 
 select:focus, .filter-input:focus {{
@@ -414,6 +440,7 @@ const HEADERS = {headers_json};
 const DISPLAY = {display_json};
 const DROPDOWNS = {dropdowns_json};
 const NUMERIC_FILTERS = {numerics_json};
+const RANGE_FILTERS = {ranges_json};
 const TEXT_FILTERS = {texts_json};
 const FILTER_OPTIONS = {filter_json};
 const SRD_LINKS = {srd_links_json};
@@ -429,6 +456,7 @@ let sortAsc = true;
 let searchTerm = '';
 let dropdownFilters = {{}};
 let numericFilters = {{}};
+let rangeFilters = {{}};
 let textFilters = {{}};
 let debounceTimer = null;
 
@@ -444,7 +472,7 @@ function buildControls() {{
     // Global search
     const sg = document.createElement('div');
     sg.className = 'control-group search-group';
-    sg.innerHTML = '<label for="search">Search</label><input type="text" id="search" placeholder="Search all fields...">';
+    sg.innerHTML = '<label for="search">Search</label><input type="text" id="search" placeholder="Search by name...">';
     ctrl.appendChild(sg);
 
     // Dropdown filters
@@ -464,6 +492,14 @@ function buildControls() {{
         const g = document.createElement('div');
         g.className = 'control-group';
         g.innerHTML = `<label for="filter-${{col}}">${{DISPLAY[col]}}</label><input type="number" class="filter-input" id="filter-${{col}}" placeholder="Any">`;
+        ctrl.appendChild(g);
+    }});
+
+    // Range filters (above / below / exactly)
+    RANGE_FILTERS.forEach(col => {{
+        const g = document.createElement('div');
+        g.className = 'control-group';
+        g.innerHTML = `<label for="filter-${{col}}">${{DISPLAY[col]}}</label><div class="range-filter"><select id="filter-${{col}}-mode"><option value="gte">\u2265</option><option value="lte">\u2264</option><option value="eq">=</option></select><input type="number" class="filter-input" id="filter-${{col}}" placeholder="Any"></div>`;
         ctrl.appendChild(g);
     }});
 
@@ -498,6 +534,19 @@ function buildControls() {{
         }});
     }});
 
+    RANGE_FILTERS.forEach(col => {{
+        document.getElementById(`filter-${{col}}`).addEventListener('input', e => {{
+            if (!rangeFilters[col]) rangeFilters[col] = {{mode: 'gte', value: ''}};
+            rangeFilters[col].value = e.target.value;
+            render();
+        }});
+        document.getElementById(`filter-${{col}}-mode`).addEventListener('change', e => {{
+            if (!rangeFilters[col]) rangeFilters[col] = {{mode: 'gte', value: ''}};
+            rangeFilters[col].mode = e.target.value;
+            render();
+        }});
+    }});
+
     TEXT_FILTERS.forEach(col => {{
         document.getElementById(`filter-${{col}}`).addEventListener('input', e => {{
             textFilters[col] = e.target.value.toLowerCase();
@@ -511,29 +560,34 @@ function buildHeader() {{
     HEADERS.forEach(h => {{
         const th = document.createElement('th');
         if (NUMERIC_COLS.has(h)) th.className = 'num';
-        th.innerHTML = `${{DISPLAY[h]}}<span class="sort-arrow">\u25B2</span>`;
-        th.addEventListener('click', () => {{
-            if (sortCol === h) {{
-                sortAsc = !sortAsc;
-            }} else {{
-                sortCol = h;
-                sortAsc = true;
-            }}
-            document.querySelectorAll('th').forEach(el => el.classList.remove('sort-asc', 'sort-desc'));
-            th.classList.add(sortAsc ? 'sort-asc' : 'sort-desc');
-            th.querySelector('.sort-arrow').textContent = sortAsc ? '\u25B2' : '\u25BC';
-            render();
-        }});
+        if (h === 'damage_dice') {{
+            th.textContent = DISPLAY[h];
+            th.style.cursor = 'default';
+        }} else {{
+            th.innerHTML = `${{DISPLAY[h]}}<span class="sort-arrow">\u25B2</span>`;
+            th.addEventListener('click', () => {{
+                if (sortCol === h) {{
+                    sortAsc = !sortAsc;
+                }} else {{
+                    sortCol = h;
+                    sortAsc = true;
+                }}
+                document.querySelectorAll('th').forEach(el => el.classList.remove('sort-asc', 'sort-desc'));
+                th.classList.add(sortAsc ? 'sort-asc' : 'sort-desc');
+                th.querySelector('.sort-arrow').textContent = sortAsc ? '\u25B2' : '\u25BC';
+                render();
+            }});
+        }}
         tr.appendChild(th);
     }});
 }}
 
 function getFiltered() {{
     return DATA.filter(row => {{
-        // Global text search
+        // Name search
         if (searchTerm) {{
-            const haystack = HEADERS.map(h => String(row[h])).join(' ').toLowerCase();
-            if (!haystack.includes(searchTerm)) return false;
+            const name = String(row['name']).toLowerCase();
+            if (!name.includes(searchTerm)) return false;
         }}
         // Dropdown filters (exact match on string)
         for (const col of DROPDOWNS) {{
@@ -544,6 +598,18 @@ function getFiltered() {{
             if (numericFilters[col] !== undefined && numericFilters[col] !== '') {{
                 const target = Number(numericFilters[col]);
                 if (row[col] === '' || row[col] === null || Number(row[col]) !== target) return false;
+            }}
+        }}
+        // Range filters (above / below / exactly)
+        for (const col of RANGE_FILTERS) {{
+            const rf = rangeFilters[col];
+            if (rf && rf.value !== undefined && rf.value !== '') {{
+                const target = Number(rf.value);
+                const val = Number(row[col]);
+                if (row[col] === '' || row[col] === null || isNaN(val)) return false;
+                if (rf.mode === 'gte' && val < target) return false;
+                if (rf.mode === 'lte' && val > target) return false;
+                if (rf.mode === 'eq' && val !== target) return false;
             }}
         }}
         // Text filters (substring match)
