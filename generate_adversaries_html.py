@@ -239,6 +239,17 @@ select {{
     width: 80px;
 }}
 
+/* Hide number input spinners */
+.filter-input[type="number"] {{
+    -moz-appearance: textfield;
+    appearance: textfield;
+}}
+.filter-input[type="number"]::-webkit-inner-spin-button,
+.filter-input[type="number"]::-webkit-outer-spin-button {{
+    -webkit-appearance: none;
+    margin: 0;
+}}
+
 .filter-input.text-filter {{
     width: 100px;
 }}
