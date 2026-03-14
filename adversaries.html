@@ -48,7 +48,7 @@ h1 {
 
 .control-group label {
     font-size: 0.75rem;
-    color: #8899aa;
+    color: #a3b1bf;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     font-weight: 600;
@@ -130,7 +130,7 @@ select:focus, .filter-input:focus {
 
 .count {
     font-size: 0.85rem;
-    color: #8899aa;
+    color: #a3b1bf;
     padding: 0.5rem 0;
     align-self: end;
     white-space: nowrap;
@@ -245,7 +245,7 @@ footer {
     border-radius: 8px;
     font-size: 0.8rem;
     line-height: 1.6;
-    color: #8899aa;
+    color: #a3b1bf;
 }
 
 footer p {
@@ -272,6 +272,39 @@ footer .attribution {
     margin-top: 0.75rem;
 }
 
+th:focus {
+    outline: 2px solid #c9a84c;
+    outline-offset: -2px;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.skip-link {
+    position: absolute;
+    top: -40px;
+    left: 0;
+    background: #c9a84c;
+    color: #1a1a2e;
+    padding: 0.5rem 1rem;
+    z-index: 100;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.skip-link:focus {
+    top: 0;
+}
+
 @media (max-width: 600px) {
     h1 { font-size: 1.3rem; }
     .controls { padding: 0.75rem; gap: 0.5rem; }
@@ -283,12 +316,15 @@ footer .attribution {
 </style>
 </head>
 <body>
-<div class="container">
+<a class="skip-link" href="#tbody">Skip to adversary table</a>
+<main class="container">
     <h1>Daggerheart Adversaries</h1>
+    <h2 class="sr-only">Filters</h2>
     <div class="controls" id="controls"></div>
-    <div class="count" id="count"></div>
+    <div class="count" id="count" aria-live="polite" role="status"></div>
     <div class="table-wrap">
         <table>
+            <caption class="sr-only">Daggerheart adversary statistics</caption>
             <thead><tr id="thead"></tr></thead>
             <tbody id="tbody"></tbody>
         </table>
@@ -299,7 +335,7 @@ footer .attribution {
             <p>This product includes materials from the Daggerheart System Reference Document 1.0, &copy; Critical Role, LLC. under the terms of the <a href="https://darringtonpress.com/license/" target="_blank" rel="noopener">Darrington Press Community Gaming (DPCGL) License</a>. More information can be found at <a href="https://www.daggerheart.com" target="_blank" rel="noopener">daggerheart.com</a>. This material has been reorganized and reformatted into a searchable reference. There are no previous modifications by others.</p>
         </div>
     </footer>
-</div>
+</main>
 <script>
 const DATA = [{"name": "Acid Burrower", "tier": 1, "type": "Solo", "battle_points": 5, "difficulty": 14, "hp": 8, "stress": 3, "low_threshold": 8, "high_threshold": 15, "atk_bonus": 3, "damage_dice": "1d12+2", "base_damage": 8.5}, {"name": "Adult Flickerfly", "tier": 3, "type": "Solo", "battle_points": 5, "difficulty": 17, "hp": 12, "stress": 6, "low_threshold": 20, "high_threshold": 35, "atk_bonus": 3, "damage_dice": "3d20", "base_damage": 31.5}, {"name": "Apprentice Assassin", "tier": 2, "type": "Minion", "battle_points": 1, "difficulty": 13, "hp": 1, "stress": 1, "low_threshold": "", "high_threshold": "", "atk_bonus": -1, "damage_dice": 4, "base_damage": 4}, {"name": "Arch-Necromancer", "tier": 4, "type": "Leader", "battle_points": 3, "difficulty": 21, "hp": 9, "stress": 8, "low_threshold": 33, "high_threshold": 66, "atk_bonus": 6, "damage_dice": "4d12+8", "base_damage": 34}, {"name": "Archer Guard", "tier": 1, "type": "Ranged", "battle_points": 2, "difficulty": 10, "hp": 3, "stress": 2, "low_threshold": 4, "high_threshold": 8, "atk_bonus": 1, "damage_dice": "1d8+3", "base_damage": 7.5}, {"name": "Archer Squadron", "tier": 2, "type": "Horde", "battle_points": 2, "difficulty": 13, "hp": 4, "stress": 3, "low_threshold": 8, "high_threshold": 16, "atk_bonus": 0, "damage_dice": "2d6+3", "base_damage": 10}, {"name": "Assassin Poisoner", "tier": 2, "type": "Skulk", "battle_points": 2, "difficulty": 14, "hp": 4, "stress": 4, "low_threshold": 8, "high_threshold": 16, "atk_bonus": 3, "damage_dice": "2d8+1", "base_damage": 10}, {"name": "Battle Box", "tier": 2, "type": "Solo", "battle_points": 5, "difficulty": 15, "hp": 8, "stress": 6, "low_threshold": 10, "high_threshold": 20, "atk_bonus": 2, "damage_dice": "2d6+3", "base_damage": 10}, {"name": "Bear", "tier": 1, "type": "Bruiser", "battle_points": 4, "difficulty": 14, "hp": 7, "stress": 2, "low_threshold": 9, "high_threshold": 17, "atk_bonus": 1, "damage_dice": "1d8+3", "base_damage": 7.5}, {"name": "Bladed Guard", "tier": 1, "type": "Standard", "battle_points": 2, "difficulty": 12, "hp": 5, "stress": 2, "low_threshold": 5, "high_threshold": 9, "atk_bonus": 1, "damage_dice": "1d6+1", "base_damage": 4.5}, {"name": "Brawny Zombie", "tier": 1, "type": "Bruiser", "battle_points": 4, "difficulty": 10, "hp": 7, "stress": 4, "low_threshold": 8, "high_threshold": 15, "atk_bonus": 2, "damage_dice": "1d12+3", "base_damage": 9.5}, {"name": "Cave Ogre", "tier": 1, "type": "Solo", "battle_points": 5, "difficulty": 13, "hp": 8, "stress": 3, "low_threshold": 8, "high_threshold": 15, "atk_bonus": 1, "damage_dice": "1d10+2", "base_damage": 7.5}, {"name": "Chaos Skull", "tier": 2, "type": "Ranged", "battle_points": 2, "difficulty": 15, "hp": 5, "stress": 4, "low_threshold": 8, "high_threshold": 16, "atk_bonus": 2, "damage_dice": "2d8+3", "base_damage": 12}, {"name": "Conscript", "tier": 2, "type": "Minion", "battle_points": 1, "difficulty": 12, "hp": 1, "stress": 1, "low_threshold": "", "high_threshold": "", "atk_bonus": 0, "damage_dice": 6, "base_damage": 6}, {"name": "Construct", "tier": 1, "type": "Solo", "battle_points": 5, "difficulty": 13, "hp": 9, "stress": 4, "low_threshold": 7, "high_threshold": 15, "atk_bonus": 4, "damage_dice": "1d20", "base_damage": 10.5}, {"name": "Courtesan", "tier": 2, "type": "Social", "battle_points": 1, "difficulty": 13, "hp": 3, "stress": 4, "low_threshold": 7, "high_threshold": 13, "atk_bonus": -3, "damage_dice": "1d4+3", "base_damage": 5.5}, {"name": "Courtier", "tier": 1, "type": "Social", "battle_points": 1, "difficulty": 12, "hp": 3, "stress": 4, "low_threshold": 4, "high_threshold": 8, "atk_bonus": -4, "damage_dice": "1d4+2", "base_damage": 4.5}, {"name": "Cult Adept", "tier": 2, "type": "Support", "battle_points": 1, "difficulty": 14, "hp": 4, "stress": 6, "low_threshold": 9, "high_threshold": 18, "atk_bonus": 2, "damage_dice": "2d4+3", "base_damage": 8}, {"name": "Cult Fang", "tier": 2, "type": "Skulk", "battle_points": 2, "difficulty": 15, "hp": 4, "stress": 4, "low_threshold": 9, "high_threshold": 17, "atk_bonus": 2, "damage_dice": "2d8+4", "base_damage": 13}, {"name": "Cult Initiate", "tier": 2, "type": "Minion", "battle_points": 1, "difficulty": 13, "hp": 1, "stress": 1, "low_threshold": "", "high_threshold": "", "atk_bonus": 0, "damage_dice": 5, "base_damage": 5}, {"name": "Deeproot Defender", "tier": 1, "type": "Bruiser", "battle_points": 4, "difficulty": 10, "hp": 7, "stress": 3, "low_threshold": 8, "high_threshold": 14, "atk_bonus": 2, "damage_dice": "1d8+3", "base_damage": 7.5}, {"name": "Demon Of Avarice", "tier": 3, "type": "Support", "battle_points": 1, "difficulty": 17, "hp": 6, "stress": 5, "low_threshold": 15, "high_threshold": 29, "atk_bonus": 2, "damage_dice": "3d6+5", "base_damage": 15.5}, {"name": "Demon Of Despair", "tier": 3, "type": "Skulk", "battle_points": 2, "difficulty": 17, "hp": 6, "stress": 5, "low_threshold": 18, "high_threshold": 35, "atk_bonus": 3, "damage_dice": "3d6+4", "base_damage": 14.5}, {"name": "Demon Of Hubris", "tier": 3, "type": "Leader", "battle_points": 3, "difficulty": 19, "hp": 7, "stress": 5, "low_threshold": 20, "high_threshold": 36, "atk_bonus": 4, "damage_dice": "3d10", "base_damage": 16.5}, {"name": "Demon Of Jealousy", "tier": 3, "type": "Ranged", "battle_points": 2, "difficulty": 17, "hp": 6, "stress": 6, "low_threshold": 17, "high_threshold": 30, "atk_bonus": 4, "damage_dice": "3d8+3", "base_damage": 16.5}, {"name": "Demon Of Wrath", "tier": 3, "type": "Bruiser", "battle_points": 4, "difficulty": 17, "hp": 7, "stress": 5, "low_threshold": 22, "high_threshold": 40, "atk_bonus": 3, "damage_dice": "3d8+1", "base_damage": 14.5}, {"name": "Demonic Hound Pack", "tier": 2, "type": "Horde", "battle_points": 2, "difficulty": 15, "hp": 6, "stress": 3, "low_threshold": 11, "high_threshold": 23, "atk_bonus": 0, "damage_dice": "2d8+2", "base_damage": 11}, {"name": "Dire Bat", "tier": 3, "type": "Skulk", "battle_points": 2, "difficulty": 14, "hp": 5, "stress": 3, "low_threshold": 16, "high_threshold": 30, "atk_bonus": 2, "damage_dice": "2d6+7", "base_damage": 14}, {"name": "Dire Wolf", "tier": 1, "type": "Skulk", "battle_points": 2, "difficulty": 12, "hp": 4, "stress": 3, "low_threshold": 5, "high_threshold": 9, "atk_bonus": 2, "damage_dice": "1d6+2", "base_damage": 5.5}, {"name": "Dryad", "tier": 3, "type": "Leader", "battle_points": 3, "difficulty": 16, "hp": 8, "stress": 5, "low_threshold": 24, "high_threshold": 38, "atk_bonus": 4, "damage_dice": "3d10+1", "base_damage": 17.5}, {"name": "Electric Eels", "tier": 2, "type": "Horde", "battle_points": 2, "difficulty": 14, "hp": 5, "stress": 3, "low_threshold": 10, "high_threshold": 20, "atk_bonus": 0, "damage_dice": "2d6+4", "base_damage": 11}, {"name": "Elemental Spark", "tier": 3, "type": "Minion", "battle_points": 1, "difficulty": 15, "hp": 1, "stress": 1, "low_threshold": "", "high_threshold": "", "atk_bonus": 0, "damage_dice": 5, "base_damage": 5}, {"name": "Elite Soldier", "tier": 2, "type": "Standard", "battle_points": 2, "difficulty": 15, "hp": 4, "stress": 3, "low_threshold": 9, "high_threshold": 18, "atk_bonus": 1, "damage_dice": "2d8+4", "base_damage": 13}, {"name": "Failed Experiment", "tier": 2, "type": "Standard", "battle_points": 2, "difficulty": 13, "hp": 3, "stress": 3, "low_threshold": 12, "high_threshold": 23, "atk_bonus": 1, "damage_dice": "2d6+5", "base_damage": 12}, {"name": "Fallen Shock Troop", "tier": 4, "type": "Minion", "battle_points": 1, "difficulty": 18, "hp": 1, "stress": 1, "low_threshold": "", "high_threshold": "", "atk_bonus": 2, "damage_dice": 12, "base_damage": 12}, {"name": "Fallen Sorcerer", "tier": 4, "type": "Support", "battle_points": 1, "difficulty": 19, "hp": 6, "stress": 5, "low_threshold": 26, "high_threshold": 42, "atk_bonus": 4, "damage_dice": "4d6+10", "base_damage": 24}, {"name": "Fallen Warlord: Realm-Breaker", "tier": 4, "type": "Solo", "battle_points": 5, "difficulty": 20, "hp": 8, "stress": 5, "low_threshold": 36, "high_threshold": 66, "atk_bonus": 7, "damage_dice": "4d8+7", "base_damage": 25}, {"name": "Fallen Warlord: Undefeated Champion", "tier": 4, "type": "Solo", "battle_points": 5, "difficulty": 18, "hp": 11, "stress": 5, "low_threshold": 35, "high_threshold": 58, "atk_bonus": 8, "damage_dice": "4d12+13", "base_damage": 39}, {"name": "Giant Beastmaster", "tier": 2, "type": "Leader", "battle_points": 3, "difficulty": 16, "hp": 6, "stress": 5, "low_threshold": 12, "high_threshold": 24, "atk_bonus": 2, "damage_dice": "2d8+4", "base_damage": 13}, {"name": "Giant Brawler", "tier": 2, "type": "Bruiser", "battle_points": 4, "difficulty": 15, "hp": 7, "stress": 4, "low_threshold": 12, "high_threshold": 28, "atk_bonus": 2, "damage_dice": "2d12+3", "base_damage": 16}, {"name": "Giant Eagle", "tier": 2, "type": "Skulk", "battle_points": 2, "difficulty": 14, "hp": 4, "stress": 4, "low_threshold": 8, "high_threshold": 19, "atk_bonus": 1, "damage_dice": "2d6+3", "base_damage": 10}, {"name": "Giant Mosquitoes", "tier": 1, "type": "Horde", "battle_points": 2, "difficulty": 10, "hp": 6, "stress": 3, "low_threshold": 5, "high_threshold": 9, "atk_bonus": -2, "damage_dice": "1d8+3", "base_damage": 7.5}, {"name": "Giant Rat", "tier": 1, "type": "Minion", "battle_points": 1, "difficulty": 10, "hp": 1, "stress": 1, "low_threshold": "", "high_threshold": "", "atk_bonus": -4, "damage_dice": 1, "base_damage": 1}, {"name": "Giant Recruit", "tier": 2, "type": "Minion", "battle_points": 1, "difficulty": 13, "hp": 1, "stress": 2, "low_threshold": "", "high_threshold": "", "atk_bonus": 1, "damage_dice": 5, "base_damage": 5}, {"name": "Giant Scorpion", "tier": 1, "type": "Bruiser", "battle_points": 4, "difficulty": 13, "hp": 6, "stress": 3, "low_threshold": 7, "high_threshold": 13, "atk_bonus": 1, "damage_dice": "1d12+2", "base_damage": 8.5}, {"name": "Glass Snake", "tier": 1, "type": "Standard", "battle_points": 2, "difficulty": 14, "hp": 5, "stress": 3, "low_threshold": 6, "high_threshold": 10, "atk_bonus": 2, "damage_dice": "1d8+2", "base_damage": 6.5}, {"name": "Gorgon", "tier": 2, "type": "Solo", "battle_points": 5, "difficulty": 15, "hp": 9, "stress": 3, "low_threshold": 13, "high_threshold": 25, "atk_bonus": 4, "damage_dice": "2d20+3", "base_damage": 24}, {"name": "Greater Earth Elemental", "tier": 3, "type": "Bruiser", "battle_points": 4, "difficulty": 17, "hp": 10, "stress": 4, "low_threshold": 22, "high_threshold": 40, "atk_bonus": 7, "damage_dice": "3d10+1", "base_damage": 17.5}, {"name": "Greater Water Elemental", "tier": 3, "type": "Support", "battle_points": 1, "difficulty": 17, "hp": 5, "stress": 5, "low_threshold": 17, "high_threshold": 34, "atk_bonus": 3, "damage_dice": "3d4+1", "base_damage": 8.5}, {"name": "Green Ooze", "tier": 1, "type": "Skulk", "battle_points": 2, "difficulty": 8, "hp": 5, "stress": 2, "low_threshold": 5, "high_threshold": 10, "atk_bonus": 1, "damage_dice": "1d6+1", "base_damage": 4.5}, {"name": "Hallowed Archer", "tier": 4, "type": "Ranged", "battle_points": 2, "difficulty": 19, "hp": 3, "stress": 2, "low_threshold": 25, "high_threshold": 45, "atk_bonus": 4, "damage_dice": "4d8+8", "base_damage": 26}, {"name": "Hallowed Soldier", "tier": 4, "type": "Minion", "battle_points": 1, "difficulty": 18, "hp": 1, "stress": 2, "low_threshold": "", "high_threshold": "", "atk_bonus": 2, "damage_dice": 10, "base_damage": 10}, {"name": "Harrier", "tier": 1, "type": "Standard", "battle_points": 2, "difficulty": 12, "hp": 3, "stress": 3, "low_threshold": 5, "high_threshold": 9, "atk_bonus": 1, "damage_dice": "1d6+2", "base_damage": 5.5}, {"name": "Head Guard", "tier": 1, "type": "Leader", "battle_points": 3, "difficulty": 15, "hp": 7, "stress": 3, "low_threshold": 7, "high_threshold": 13, "atk_bonus": 4, "damage_dice": "1d10+4", "base_damage": 9.5}, {"name": "Head Vampire", "tier": 3, "type": "Leader", "battle_points": 3, "difficulty": 17, "hp": 6, "stress": 6, "low_threshold": 22, "high_threshold": 42, "atk_bonus": 5, "damage_dice": "2d20+4", "base_damage": 25}, {"name": "High Seraph", "tier": 4, "type": "Leader", "battle_points": 3, "difficulty": 20, "hp": 7, "stress": 5, "low_threshold": 37, "high_threshold": 70, "atk_bonus": 8, "damage_dice": "4d10+10", "base_damage": 32}, {"name": "Huge Green Ooze", "tier": 3, "type": "Skulk", "battle_points": 2, "difficulty": 15, "hp": 7, "stress": 4, "low_threshold": 15, "high_threshold": 30, "atk_bonus": 3, "damage_dice": "3d8+1", "base_damage": 14.5}, {"name": "Hydra", "tier": 3, "type": "Solo", "battle_points": 5, "difficulty": 18, "hp": 10, "stress": 5, "low_threshold": 19, "high_threshold": 35, "atk_bonus": 3, "damage_dice": "2d12+2", "base_damage": 15}, {"name": "Jagged Knife Bandit", "tier": 1, "type": "Standard", "battle_points": 2, "difficulty": 12, "hp": 5, "stress": 3, "low_threshold": 8, "high_threshold": 14, "atk_bonus": 1, "damage_dice": "1d8+1", "base_damage": 5.5}, {"name": "Jagged Knife Hexer", "tier": 1, "type": "Support", "battle_points": 1, "difficulty": 13, "hp": 4, "stress": 4, "low_threshold": 5, "high_threshold": 9, "atk_bonus": 2, "damage_dice": "1d6+2", "base_damage": 5.5}, {"name": "Jagged Knife Kneebreaker", "tier": 1, "type": "Bruiser", "battle_points": 4, "difficulty": 12, "hp": 7, "stress": 4, "low_threshold": 7, "high_threshold": 14, "atk_bonus": -3, "damage_dice": "1d4+6", "base_damage": 8.5}, {"name": "Jagged Knife Lackey", "tier": 1, "type": "Minion", "battle_points": 1, "difficulty": 9, "hp": 1, "stress": 1, "low_threshold": "", "high_threshold": "", "atk_bonus": -2, "damage_dice": 2, "base_damage": 2}, {"name": "Jagged Knife Lieutenant", "tier": 1, "type": "Leader", "battle_points": 3, "difficulty": 13, "hp": 6, "stress": 3, "low_threshold": 7, "high_threshold": 14, "atk_bonus": 2, "damage_dice": "1d8+3", "base_damage": 7.5}, {"name": "Jagged Knife Shadow", "tier": 1, "type": "Skulk", "battle_points": 2, "difficulty": 12, "hp": 3, "stress": 3, "low_threshold": 4, "high_threshold": 8, "atk_bonus": 1, "damage_dice": "1d4+4", "base_damage": 6.5}, {"name": "Jagged Knife Sniper", "tier": 1, "type": "Ranged", "battle_points": 2, "difficulty": 13, "hp": 3, "stress": 2, "low_threshold": 4, "high_threshold": 7, "atk_bonus": -1, "damage_dice": "1d10+2", "base_damage": 7.5}, {"name": "Juvenile Flickerfly", "tier": 2, "type": "Solo", "battle_points": 5, "difficulty": 14, "hp": 10, "stress": 5, "low_threshold": 13, "high_threshold": 26, "atk_bonus": 3, "damage_dice": "2d10+4", "base_damage": 15}, {"name": "Knight Of The Realm", "tier": 2, "type": "Leader", "battle_points": 3, "difficulty": 15, "hp": 6, "stress": 4, "low_threshold": 13, "high_threshold": 26, "atk_bonus": 4, "damage_dice": "2d10+4", "base_damage": 15}, {"name": "Kraken", "tier": 4, "type": "Solo", "battle_points": 5, "difficulty": 20, "hp": 11, "stress": 8, "low_threshold": 35, "high_threshold": 70, "atk_bonus": 7, "damage_dice": "4d12+10", "base_damage": 36}, {"name": "Masked Thief", "tier": 2, "type": "Skulk", "battle_points": 2, "difficulty": 14, "hp": 4, "stress": 5, "low_threshold": 8, "high_threshold": 17, "atk_bonus": 3, "damage_dice": "2d8+3", "base_damage": 12}, {"name": "Master Assassin", "tier": 2, "type": "Leader", "battle_points": 3, "difficulty": 15, "hp": 7, "stress": 5, "low_threshold": 12, "high_threshold": 25, "atk_bonus": 5, "damage_dice": "2d10+2", "base_damage": 13}, {"name": "Merchant Baron", "tier": 2, "type": "Social", "battle_points": 1, "difficulty": 15, "hp": 5, "stress": 3, "low_threshold": 9, "high_threshold": 19, "atk_bonus": 2, "damage_dice": "1d6+2", "base_damage": 5.5}, {"name": "Merchant", "tier": 1, "type": "Social", "battle_points": 1, "difficulty": 12, "hp": 3, "stress": 3, "low_threshold": 4, "high_threshold": 8, "atk_bonus": -4, "damage_dice": "1d4+1", "base_damage": 3.5}, {"name": "Minor Chaos Elemental", "tier": 1, "type": "Solo", "battle_points": 5, "difficulty": 14, "hp": 7, "stress": 3, "low_threshold": 7, "high_threshold": 14, "atk_bonus": 3, "damage_dice": "1d12+6", "base_damage": 12.5}, {"name": "Minor Demon", "tier": 1, "type": "Solo", "battle_points": 5, "difficulty": 14, "hp": 8, "stress": 4, "low_threshold": 8, "high_threshold": 15, "atk_bonus": 3, "damage_dice": "1d8+6", "base_damage": 10.5}, {"name": "Minor Fire Elemental", "tier": 1, "type": "Solo", "battle_points": 5, "difficulty": 13, "hp": 9, "stress": 3, "low_threshold": 7, "high_threshold": 15, "atk_bonus": 3, "damage_dice": "1d10+4", "base_damage": 9.5}, {"name": "Minor Treant", "tier": 1, "type": "Minion", "battle_points": 1, "difficulty": 10, "hp": 1, "stress": 1, "low_threshold": "", "high_threshold": "", "atk_bonus": -2, "damage_dice": 4, "base_damage": 4}, {"name": "Minotaur Wrecker", "tier": 2, "type": "Bruiser", "battle_points": 4, "difficulty": 16, "hp": 7, "stress": 5, "low_threshold": 14, "high_threshold": 27, "atk_bonus": 2, "damage_dice": "2d8+5", "base_damage": 14}, {"name": "Monarch", "tier": 3, "type": "Social", "battle_points": 1, "difficulty": 16, "hp": 6, "stress": 5, "low_threshold": 16, "high_threshold": 32, "atk_bonus": 0, "damage_dice": "3d6+3", "base_damage": 13.5}, {"name": "Mortal Hunter", "tier": 2, "type": "Leader", "battle_points": 3, "difficulty": 16, "hp": 6, "stress": 4, "low_threshold": 15, "high_threshold": 27, "atk_bonus": 5, "damage_dice": "2d12+1", "base_damage": 14}, {"name": "Oak Treant", "tier": 3, "type": "Bruiser", "battle_points": 4, "difficulty": 17, "hp": 7, "stress": 4, "low_threshold": 22, "high_threshold": 40, "atk_bonus": 2, "damage_dice": "3d8+2", "base_damage": 15.5}, {"name": "Oracle Of Doom", "tier": 4, "type": "Solo", "battle_points": 5, "difficulty": 20, "hp": 11, "stress": 10, "low_threshold": 38, "high_threshold": 68, "atk_bonus": 8, "damage_dice": "4d8+9", "base_damage": 27}, {"name": "Outer Realms Abomination", "tier": 4, "type": "Bruiser", "battle_points": 4, "difficulty": 19, "hp": 7, "stress": 5, "low_threshold": 35, "high_threshold": 71, "atk_bonus": 5, "damage_dice": "4d6+13", "base_damage": 27}, {"name": "Outer Realms Corrupter", "tier": 4, "type": "Support", "battle_points": 1, "difficulty": 19, "hp": 4, "stress": 3, "low_threshold": 27, "high_threshold": 47, "atk_bonus": 7, "damage_dice": "4d8+5", "base_damage": 23}, {"name": "Outer Realms Thrall", "tier": 4, "type": "Minion", "battle_points": 1, "difficulty": 17, "hp": 1, "stress": 1, "low_threshold": "", "high_threshold": "", "atk_bonus": 3, "damage_dice": 11, "base_damage": 11}, {"name": "Patchwork Zombie Hulk", "tier": 1, "type": "Solo", "battle_points": 5, "difficulty": 13, "hp": 10, "stress": 3, "low_threshold": 8, "high_threshold": 15, "atk_bonus": 4, "damage_dice": "1d20", "base_damage": 10.5}, {"name": "Perfected Zombie", "tier": 4, "type": "Bruiser", "battle_points": 4, "difficulty": 20, "hp": 9, "stress": 4, "low_threshold": 40, "high_threshold": 70, "atk_bonus": 4, "damage_dice": "4d12+15", "base_damage": 41}, {"name": "Petty Noble", "tier": 1, "type": "Social", "battle_points": 1, "difficulty": 14, "hp": 3, "stress": 5, "low_threshold": 6, "high_threshold": 10, "atk_bonus": -3, "damage_dice": "1d6+1", "base_damage": 4.5}, {"name": "Pirate Captain", "tier": 1, "type": "Leader", "battle_points": 3, "difficulty": 14, "hp": 7, "stress": 5, "low_threshold": 7, "high_threshold": 14, "atk_bonus": 1, "damage_dice": "1d12+2", "base_damage": 8.5}, {"name": "Pirate Raiders", "tier": 1, "type": "Horde", "battle_points": 2, "difficulty": 12, "hp": 4, "stress": 3, "low_threshold": 5, "high_threshold": 11, "atk_bonus": 1, "damage_dice": "1d8+2", "base_damage": 6.5}, {"name": "Pirate Tough", "tier": 1, "type": "Bruiser", "battle_points": 4, "difficulty": 13, "hp": 5, "stress": 3, "low_threshold": 8, "high_threshold": 15, "atk_bonus": 1, "damage_dice": "2d6", "base_damage": 7}, {"name": "Red Ooze", "tier": 1, "type": "Skulk", "battle_points": 2, "difficulty": 10, "hp": 5, "stress": 3, "low_threshold": 6, "high_threshold": 11, "atk_bonus": 1, "damage_dice": "1d8+3", "base_damage": 7.5}, {"name": "Rotted Zombie", "tier": 1, "type": "Minion", "battle_points": 1, "difficulty": 8, "hp": 1, "stress": 1, "low_threshold": "", "high_threshold": "", "atk_bonus": -3, "damage_dice": 2, "base_damage": 2}, {"name": "Royal Advisor", "tier": 2, "type": "Social", "battle_points": 1, "difficulty": 14, "hp": 3, "stress": 3, "low_threshold": 8, "high_threshold": 15, "atk_bonus": -3, "damage_dice": "1d4+3", "base_damage": 5.5}, {"name": "Secret-Keeper", "tier": 2, "type": "Leader", "battle_points": 3, "difficulty": 16, "hp": 7, "stress": 4, "low_threshold": 13, "high_threshold": 26, "atk_bonus": 3, "damage_dice": "2d12", "base_damage": 13}, {"name": "Sellsword", "tier": 1, "type": "Minion", "battle_points": 1, "difficulty": 10, "hp": 1, "stress": 1, "low_threshold": "", "high_threshold": "", "atk_bonus": 3, "damage_dice": 3, "base_damage": 3}, {"name": "Shambling Zombie", "tier": 1, "type": "Standard", "battle_points": 2, "difficulty": 10, "hp": 4, "stress": 1, "low_threshold": 4, "high_threshold": 6, "atk_bonus": 0, "damage_dice": "1d6+1", "base_damage": 4.5}, {"name": "Shark", "tier": 2, "type": "Bruiser", "battle_points": 4, "difficulty": 14, "hp": 7, "stress": 3, "low_threshold": 14, "high_threshold": 28, "atk_bonus": 2, "damage_dice": "2d12+1", "base_damage": 14}, {"name": "Siren", "tier": 2, "type": "Skulk", "battle_points": 2, "difficulty": 14, "hp": 5, "stress": 3, "low_threshold": 9, "high_threshold": 18, "atk_bonus": 2, "damage_dice": "2d6+3", "base_damage": 10}, {"name": "Skeleton Archer", "tier": 1, "type": "Ranged", "battle_points": 2, "difficulty": 9, "hp": 3, "stress": 2, "low_threshold": 4, "high_threshold": 7, "atk_bonus": 2, "damage_dice": "1d8+1", "base_damage": 5.5}, {"name": "Skeleton Dredge", "tier": 1, "type": "Minion", "battle_points": 1, "difficulty": 8, "hp": 1, "stress": 1, "low_threshold": "", "high_threshold": "", "atk_bonus": -1, "damage_dice": 1, "base_damage": 1}, {"name": "Skeleton Knight", "tier": 1, "type": "Bruiser", "battle_points": 4, "difficulty": 13, "hp": 5, "stress": 2, "low_threshold": 7, "high_threshold": 13, "atk_bonus": 2, "damage_dice": "1d10+2", "base_damage": 7.5}, {"name": "Skeleton Warrior", "tier": 1, "type": "Standard", "battle_points": 2, "difficulty": 10, "hp": 3, "stress": 2, "low_threshold": 4, "high_threshold": 8, "atk_bonus": 0, "damage_dice": "1d6+2", "base_damage": 5.5}, {"name": "Spectral Archer", "tier": 2, "type": "Ranged", "battle_points": 2, "difficulty": 13, "hp": 3, "stress": 3, "low_threshold": 6, "high_threshold": 14, "atk_bonus": 3, "damage_dice": "2d10+2", "base_damage": 13}, {"name": "Spectral Captain", "tier": 2, "type": "Leader", "battle_points": 3, "difficulty": 16, "hp": 6, "stress": 4, "low_threshold": 13, "high_threshold": 26, "atk_bonus": 3, "damage_dice": "2d10+3", "base_damage": 14}, {"name": "Spectral Guardian", "tier": 2, "type": "Standard", "battle_points": 2, "difficulty": 15, "hp": 4, "stress": 3, "low_threshold": 7, "high_threshold": 15, "atk_bonus": 1, "damage_dice": "2d8+1", "base_damage": 10}, {"name": "Spellblade", "tier": 1, "type": "Leader", "battle_points": 3, "difficulty": 14, "hp": 6, "stress": 3, "low_threshold": 8, "high_threshold": 14, "atk_bonus": 3, "damage_dice": "1d8+4", "base_damage": 8.5}, {"name": "Spy", "tier": 2, "type": "Social", "battle_points": 1, "difficulty": 15, "hp": 4, "stress": 3, "low_threshold": 8, "high_threshold": 17, "atk_bonus": -2, "damage_dice": "2d6+3", "base_damage": 10}, {"name": "Stonewraith", "tier": 2, "type": "Skulk", "battle_points": 2, "difficulty": 13, "hp": 6, "stress": 3, "low_threshold": 11, "high_threshold": 22, "atk_bonus": 3, "damage_dice": "2d8+6", "base_damage": 15}, {"name": "Swarm Of Rats", "tier": 1, "type": "Horde", "battle_points": 2, "difficulty": 10, "hp": 6, "stress": 2, "low_threshold": 6, "high_threshold": 10, "atk_bonus": -3, "damage_dice": "1d8+2", "base_damage": 6.5}, {"name": "Sylvan Soldier", "tier": 1, "type": "Standard", "battle_points": 2, "difficulty": 11, "hp": 4, "stress": 2, "low_threshold": 6, "high_threshold": 11, "atk_bonus": 0, "damage_dice": "1d8+1", "base_damage": 5.5}, {"name": "Tangle Bramble Swarm", "tier": 1, "type": "Horde", "battle_points": 2, "difficulty": 12, "hp": 6, "stress": 3, "low_threshold": 6, "high_threshold": 11, "atk_bonus": 0, "damage_dice": "1d6+3", "base_damage": 6.5}, {"name": "Tangle Bramble", "tier": 1, "type": "Minion", "battle_points": 1, "difficulty": 11, "hp": 1, "stress": 1, "low_threshold": "", "high_threshold": "", "atk_bonus": -1, "damage_dice": 2, "base_damage": 2}, {"name": "Tiny Green Ooze", "tier": 1, "type": "Skulk", "battle_points": 2, "difficulty": 14, "hp": 2, "stress": 1, "low_threshold": 4, "high_threshold": "", "atk_bonus": -1, "damage_dice": "1d4+1", "base_damage": 3.5}, {"name": "Tiny Red Ooze", "tier": 1, "type": "Skulk", "battle_points": 2, "difficulty": 11, "hp": 2, "stress": 1, "low_threshold": 5, "high_threshold": "", "atk_bonus": -1, "damage_dice": "1d4+2", "base_damage": 4.5}, {"name": "Treant Sapling", "tier": 3, "type": "Minion", "battle_points": 1, "difficulty": 14, "hp": 1, "stress": 1, "low_threshold": "", "high_threshold": "", "atk_bonus": 0, "damage_dice": 8, "base_damage": 8}, {"name": "Vampire", "tier": 3, "type": "Standard", "battle_points": 2, "difficulty": 16, "hp": 5, "stress": 4, "low_threshold": 18, "high_threshold": 35, "atk_bonus": 3, "damage_dice": "3d8", "base_damage": 13.5}, {"name": "Vault Guardian Gaoler", "tier": 3, "type": "Support", "battle_points": 1, "difficulty": 16, "hp": 5, "stress": 3, "low_threshold": 19, "high_threshold": 33, "atk_bonus": 2, "damage_dice": "3d6+2", "base_damage": 12.5}, {"name": "Vault Guardian Sentinel", "tier": 3, "type": "Bruiser", "battle_points": 4, "difficulty": 17, "hp": 6, "stress": 3, "low_threshold": 21, "high_threshold": 40, "atk_bonus": 3, "damage_dice": "2d12+1", "base_damage": 14}, {"name": "Vault Guardian Turret", "tier": 3, "type": "Ranged", "battle_points": 2, "difficulty": 16, "hp": 5, "stress": 4, "low_threshold": 20, "high_threshold": 32, "atk_bonus": 3, "damage_dice": "3d10+3", "base_damage": 19.5}, {"name": "Volcanic Dragon: Ashen Tyrant", "tier": 4, "type": "Solo", "battle_points": 5, "difficulty": 18, "hp": 8, "stress": 5, "low_threshold": 29, "high_threshold": 55, "atk_bonus": 10, "damage_dice": "4d12+15", "base_damage": 41}, {"name": "Volcanic Dragon: Molten Scourge", "tier": 4, "type": "Solo", "battle_points": 5, "difficulty": 20, "hp": 7, "stress": 5, "low_threshold": 30, "high_threshold": 58, "atk_bonus": 9, "damage_dice": "4d12+4", "base_damage": 30}, {"name": "Volcanic Dragon: Obsidian Predator", "tier": 4, "type": "Solo", "battle_points": 5, "difficulty": 19, "hp": 6, "stress": 5, "low_threshold": 33, "high_threshold": 65, "atk_bonus": 8, "damage_dice": "4d10+4", "base_damage": 26}, {"name": "War Wizard", "tier": 2, "type": "Ranged", "battle_points": 2, "difficulty": 16, "hp": 5, "stress": 6, "low_threshold": 11, "high_threshold": 23, "atk_bonus": 4, "damage_dice": "2d10+4", "base_damage": 15}, {"name": "Young Dryad", "tier": 1, "type": "Leader", "battle_points": 3, "difficulty": 11, "hp": 6, "stress": 2, "low_threshold": 6, "high_threshold": 11, "atk_bonus": 0, "damage_dice": "1d8+5", "base_damage": 9.5}, {"name": "Young Ice Dragon", "tier": 3, "type": "Solo", "battle_points": 5, "difficulty": 18, "hp": 10, "stress": 6, "low_threshold": 21, "high_threshold": 41, "atk_bonus": 7, "damage_dice": "4d10", "base_damage": 22}, {"name": "Zombie Legion", "tier": 4, "type": "Horde", "battle_points": 2, "difficulty": 17, "hp": 8, "stress": 5, "low_threshold": 25, "high_threshold": 45, "atk_bonus": 2, "damage_dice": "4d6+10", "base_damage": 24}, {"name": "Zombie Pack", "tier": 1, "type": "Horde", "battle_points": 2, "difficulty": 8, "hp": 6, "stress": 3, "low_threshold": 6, "high_threshold": 12, "atk_bonus": -1, "damage_dice": "1d10+2", "base_damage": 7.5}];
 const HEADERS = ["name", "tier", "type", "difficulty", "hp", "stress", "low_threshold", "high_threshold", "atk_bonus", "damage_dice", "base_damage"];
@@ -365,7 +401,7 @@ function buildControls() {
     RANGE_FILTERS.forEach(col => {
         const g = document.createElement('div');
         g.className = 'control-group';
-        g.innerHTML = `<label for="filter-${col}">${DISPLAY[col]}</label><div class="range-filter"><select id="filter-${col}-mode"><option value="gte">≥</option><option value="lte">≤</option><option value="eq">=</option></select><input type="number" class="filter-input" id="filter-${col}" placeholder="Any"></div>`;
+        g.innerHTML = `<label for="filter-${col}">${DISPLAY[col]}</label><div class="range-filter"><select id="filter-${col}-mode" aria-label="${DISPLAY[col]} comparison mode"><option value="gte">≥</option><option value="lte">≤</option><option value="eq">=</option></select><input type="number" class="filter-input" id="filter-${col}" placeholder="Any"></div>`;
         ctrl.appendChild(g);
     });
 
@@ -421,27 +457,52 @@ function buildControls() {
     });
 }
 
+function esc(s) {
+    if (!s && s !== 0) return '';
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}
+
 function buildHeader() {
     const tr = document.getElementById('thead');
     HEADERS.forEach(h => {
         const th = document.createElement('th');
+        th.setAttribute('scope', 'col');
         if (NUMERIC_COLS.has(h)) th.className = 'num';
         if (h === 'damage_dice') {
             th.textContent = DISPLAY[h];
             th.style.cursor = 'default';
         } else {
-            th.innerHTML = `${DISPLAY[h]}<span class="sort-arrow">▲</span>`;
-            th.addEventListener('click', () => {
+            th.textContent = DISPLAY[h];
+            const arrow = document.createElement('span');
+            arrow.className = 'sort-arrow';
+            arrow.setAttribute('aria-hidden', 'true');
+            arrow.textContent = '▲';
+            th.appendChild(arrow);
+            th.setAttribute('tabindex', '0');
+            const doSort = () => {
                 if (sortCol === h) {
                     sortAsc = !sortAsc;
                 } else {
                     sortCol = h;
                     sortAsc = true;
                 }
-                document.querySelectorAll('th').forEach(el => el.classList.remove('sort-asc', 'sort-desc'));
+                document.querySelectorAll('th').forEach(el => {
+                    el.classList.remove('sort-asc', 'sort-desc');
+                    el.removeAttribute('aria-sort');
+                });
                 th.classList.add(sortAsc ? 'sort-asc' : 'sort-desc');
+                th.setAttribute('aria-sort', sortAsc ? 'ascending' : 'descending');
                 th.querySelector('.sort-arrow').textContent = sortAsc ? '▲' : '▼';
                 render();
+            };
+            th.addEventListener('click', doSort);
+            th.addEventListener('keydown', e => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    doSort();
+                }
             });
         }
         tr.appendChild(th);
@@ -518,9 +579,10 @@ function render() {
     const html = rows.map(row =>
         '<tr>' + HEADERS.map(h => {
             const cls = NUMERIC_COLS.has(h) ? ' class="num"' : '';
-            const val = row[h] === '' ? '—' : row[h];
+            const raw = row[h] === '' || row[h] === null ? '—' : row[h];
+            const val = esc(raw);
             if (h === 'name' && SRD_LINKS[row[h]]) {
-                return `<td${cls}><a href="${SRD_LINKS[row[h]]}" target="_blank" rel="noopener">${val}</a></td>`;
+                return `<td${cls}><a href="${esc(SRD_LINKS[row[h]])}" target="_blank" rel="noopener">${val}</a></td>`;
             }
             return `<td${cls}>${val}</td>`;
         }).join('') + '</tr>'

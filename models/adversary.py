@@ -216,4 +216,6 @@ class Adversary:
         safe = re.sub(r'[^\w\s-]', '', self.name)
         # Collapse multiple spaces
         safe = re.sub(r'\s+', ' ', safe).strip()
+        # Defense-in-depth: strip path separators
+        safe = safe.replace('/', '').replace('\\', '')
         return safe

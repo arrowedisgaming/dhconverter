@@ -118,6 +118,11 @@ def get_dropdown_options(headers: list[str], rows: list[dict]) -> dict:
     return options
 
 
+def safe_json_embed(obj, **kwargs):
+    """JSON-encode for embedding inside <script> — escapes </ to prevent tag breakout."""
+    return json.dumps(obj, **kwargs).replace("</", "<\\/")
+
+
 def generate_html(headers: list[str], rows: list[dict], srd_links: dict[str, str]) -> str:
     """Generate the complete HTML string."""
     # Remove excluded columns
@@ -133,15 +138,15 @@ def generate_html(headers: list[str], rows: list[dict], srd_links: dict[str, str
 
     display_names = {h: h.replace("_", " ").title() for h in headers}
 
-    data_json = json.dumps(rows, default=str)
-    filter_json = json.dumps(filter_options)
-    headers_json = json.dumps(headers)
-    display_json = json.dumps(display_names)
-    dropdowns_json = json.dumps(dropdowns)
-    numerics_json = json.dumps(numerics)
-    ranges_json = json.dumps(ranges)
-    texts_json = json.dumps(texts)
-    srd_links_json = json.dumps(srd_links)
+    data_json = safe_json_embed(rows, default=str)
+    filter_json = safe_json_embed(filter_options)
+    headers_json = safe_json_embed(headers)
+    display_json = safe_json_embed(display_names)
+    dropdowns_json = safe_json_embed(dropdowns)
+    numerics_json = safe_json_embed(numerics)
+    ranges_json = safe_json_embed(ranges)
+    texts_json = safe_json_embed(texts)
+    srd_links_json = safe_json_embed(srd_links)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -193,7 +198,7 @@ h1 {{
 
 .control-group label {{
     font-size: 0.75rem;
-    color: #8899aa;
+    color: #a3b1bf;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     font-weight: 600;
@@ -275,7 +280,7 @@ select:focus, .filter-input:focus {{
 
 .count {{
     font-size: 0.85rem;
-    color: #8899aa;
+    color: #a3b1bf;
     padding: 0.5rem 0;
     align-self: end;
     white-space: nowrap;
@@ -390,7 +395,7 @@ footer {{
     border-radius: 8px;
     font-size: 0.8rem;
     line-height: 1.6;
-    color: #8899aa;
+    color: #a3b1bf;
 }}
 
 footer p {{
@@ -417,6 +422,39 @@ footer .attribution {{
     margin-top: 0.75rem;
 }}
 
+th:focus {{
+    outline: 2px solid #c9a84c;
+    outline-offset: -2px;
+}}
+
+.sr-only {{
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}}
+
+.skip-link {{
+    position: absolute;
+    top: -40px;
+    left: 0;
+    background: #c9a84c;
+    color: #1a1a2e;
+    padding: 0.5rem 1rem;
+    z-index: 100;
+    font-weight: 600;
+    text-decoration: none;
+}}
+
+.skip-link:focus {{
+    top: 0;
+}}
+
 @media (max-width: 600px) {{
     h1 {{ font-size: 1.3rem; }}
     .controls {{ padding: 0.75rem; gap: 0.5rem; }}
@@ -428,12 +466,15 @@ footer .attribution {{
 </style>
 </head>
 <body>
-<div class="container">
+<a class="skip-link" href="#tbody">Skip to adversary table</a>
+<main class="container">
     <h1>Daggerheart Adversaries</h1>
+    <h2 class="sr-only">Filters</h2>
     <div class="controls" id="controls"></div>
-    <div class="count" id="count"></div>
+    <div class="count" id="count" aria-live="polite" role="status"></div>
     <div class="table-wrap">
         <table>
+            <caption class="sr-only">Daggerheart adversary statistics</caption>
             <thead><tr id="thead"></tr></thead>
             <tbody id="tbody"></tbody>
         </table>
@@ -444,7 +485,7 @@ footer .attribution {{
             <p>This product includes materials from the Daggerheart System Reference Document 1.0, &copy; Critical Role, LLC. under the terms of the <a href="https://darringtonpress.com/license/" target="_blank" rel="noopener">Darrington Press Community Gaming (DPCGL) License</a>. More information can be found at <a href="https://www.daggerheart.com" target="_blank" rel="noopener">daggerheart.com</a>. This material has been reorganized and reformatted into a searchable reference. There are no previous modifications by others.</p>
         </div>
     </footer>
-</div>
+</main>
 <script>
 const DATA = {data_json};
 const HEADERS = {headers_json};
@@ -510,7 +551,7 @@ function buildControls() {{
     RANGE_FILTERS.forEach(col => {{
         const g = document.createElement('div');
         g.className = 'control-group';
-        g.innerHTML = `<label for="filter-${{col}}">${{DISPLAY[col]}}</label><div class="range-filter"><select id="filter-${{col}}-mode"><option value="gte">\u2265</option><option value="lte">\u2264</option><option value="eq">=</option></select><input type="number" class="filter-input" id="filter-${{col}}" placeholder="Any"></div>`;
+        g.innerHTML = `<label for="filter-${{col}}">${{DISPLAY[col]}}</label><div class="range-filter"><select id="filter-${{col}}-mode" aria-label="${{DISPLAY[col]}} comparison mode"><option value="gte">\u2265</option><option value="lte">\u2264</option><option value="eq">=</option></select><input type="number" class="filter-input" id="filter-${{col}}" placeholder="Any"></div>`;
         ctrl.appendChild(g);
     }});
 
@@ -566,27 +607,52 @@ function buildControls() {{
     }});
 }}
 
+function esc(s) {{
+    if (!s && s !== 0) return '';
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}}
+
 function buildHeader() {{
     const tr = document.getElementById('thead');
     HEADERS.forEach(h => {{
         const th = document.createElement('th');
+        th.setAttribute('scope', 'col');
         if (NUMERIC_COLS.has(h)) th.className = 'num';
         if (h === 'damage_dice') {{
             th.textContent = DISPLAY[h];
             th.style.cursor = 'default';
         }} else {{
-            th.innerHTML = `${{DISPLAY[h]}}<span class="sort-arrow">\u25B2</span>`;
-            th.addEventListener('click', () => {{
+            th.textContent = DISPLAY[h];
+            const arrow = document.createElement('span');
+            arrow.className = 'sort-arrow';
+            arrow.setAttribute('aria-hidden', 'true');
+            arrow.textContent = '\u25B2';
+            th.appendChild(arrow);
+            th.setAttribute('tabindex', '0');
+            const doSort = () => {{
                 if (sortCol === h) {{
                     sortAsc = !sortAsc;
                 }} else {{
                     sortCol = h;
                     sortAsc = true;
                 }}
-                document.querySelectorAll('th').forEach(el => el.classList.remove('sort-asc', 'sort-desc'));
+                document.querySelectorAll('th').forEach(el => {{
+                    el.classList.remove('sort-asc', 'sort-desc');
+                    el.removeAttribute('aria-sort');
+                }});
                 th.classList.add(sortAsc ? 'sort-asc' : 'sort-desc');
+                th.setAttribute('aria-sort', sortAsc ? 'ascending' : 'descending');
                 th.querySelector('.sort-arrow').textContent = sortAsc ? '\u25B2' : '\u25BC';
                 render();
+            }};
+            th.addEventListener('click', doSort);
+            th.addEventListener('keydown', e => {{
+                if (e.key === 'Enter' || e.key === ' ') {{
+                    e.preventDefault();
+                    doSort();
+                }}
             }});
         }}
         tr.appendChild(th);
@@ -663,9 +729,10 @@ function render() {{
     const html = rows.map(row =>
         '<tr>' + HEADERS.map(h => {{
             const cls = NUMERIC_COLS.has(h) ? ' class="num"' : '';
-            const val = row[h] === '' ? '\u2014' : row[h];
+            const raw = row[h] === '' || row[h] === null ? '\u2014' : row[h];
+            const val = esc(raw);
             if (h === 'name' && SRD_LINKS[row[h]]) {{
-                return `<td${{cls}}><a href="${{SRD_LINKS[row[h]]}}" target="_blank" rel="noopener">${{val}}</a></td>`;
+                return `<td${{cls}}><a href="${{esc(SRD_LINKS[row[h]])}}" target="_blank" rel="noopener">${{val}}</a></td>`;
             }}
             return `<td${{cls}}>${{val}}</td>`;
         }}).join('') + '</tr>'

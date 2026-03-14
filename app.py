@@ -237,7 +237,10 @@ class ConverterHandler(BaseHTTPRequestHandler):
                 output_dir_str = fields.get("output_dir", "output/web-convert")
                 if isinstance(output_dir_str, dict):
                     output_dir_str = "output/web-convert"
-                output_dir = PROJECT_ROOT / output_dir_str
+                output_dir = (PROJECT_ROOT / output_dir_str).resolve()
+                if not output_dir.is_relative_to(PROJECT_ROOT.resolve()):
+                    self._send_json({"success": False, "error": "Output directory must be within the project."}, status=400)
+                    return
 
                 overwrite = _is_truthy(fields.get("overwrite", "false"))
                 do_markdown = _is_truthy(fields.get("markdown", "true"))
@@ -336,7 +339,11 @@ class ConverterHandler(BaseHTTPRequestHandler):
         # Check for existing source selection
         source_name = fields.get("source")
         if source_name:
-            source_path = PROJECT_ROOT / "sources" / source_name
+            if '..' in source_name or '/' in source_name or '\\' in source_name:
+                raise ValueError("Invalid source name.")
+            source_path = (PROJECT_ROOT / "sources" / source_name).resolve()
+            if not source_path.is_relative_to((PROJECT_ROOT / "sources").resolve()):
+                raise ValueError("Invalid source name.")
             if not source_path.exists():
                 raise FileNotFoundError(f"Source file not found: {source_name}")
             return source_path, None

@@ -15,7 +15,7 @@
   --border-accent: #f0a50044;
   --text: #e6edf3;
   --text-dim: #8b949e;
-  --text-muted: #484f58;
+  --text-muted: #7a828b;
   --accent: #f0a500;
   --accent-glow: #f0a50033;
   --accent-dim: #c48800;
@@ -38,7 +38,7 @@
     --border-accent: #d4940033;
     --text: #24292f;
     --text-dim: #57606a;
-    --text-muted: #8c959f;
+    --text-muted: #656d76;
     --accent: #c48800;
     --accent-glow: #c4880022;
     --accent-dim: #a07000;
@@ -470,6 +470,24 @@ body::before {
   padding-left: 1rem;
 }
 
+/* ── Skip link ─────────────────────────────────────── */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--accent);
+  color: #000;
+  padding: 0.5rem 1rem;
+  z-index: 10000;
+  font-weight: 600;
+  text-decoration: none;
+  border-radius: 0 0 var(--radius-sm) 0;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
 /* ── Utilities ─────────────────────────────────────── */
 .hidden { display: none !important; }
 
@@ -487,33 +505,36 @@ body::before {
 </head>
 <body>
 
+<a class="skip-link" href="#btn-convert">Skip to convert</a>
+
+<main>
 <div class="card">
 
   <!-- ── Header ──────────────────────────────────── -->
-  <div class="header">
-    <h1><span class="dagger">⚔</span> Daggerheart Adversary Converter</h1>
+  <header class="header">
+    <h1><span class="dagger" aria-hidden="true">⚔</span> Daggerheart Adversary Converter</h1>
     <p>Convert TTRPG stat blocks</p>
-  </div>
+  </header>
 
   <!-- ── Source selection ────────────────────────── -->
   <div class="section">
-    <div class="section-label">Source</div>
+    <h2 class="section-label">Source</h2>
 
-    <div class="tabs">
-      <button class="tab active" data-tab="upload">Upload File</button>
-      <button class="tab" data-tab="existing">Existing Sources</button>
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-tab="upload" role="tab" id="tab-upload" aria-selected="true" aria-controls="panel-upload">Upload File</button>
+      <button class="tab" data-tab="existing" role="tab" id="tab-existing" aria-selected="false" aria-controls="panel-existing">Existing Sources</button>
     </div>
 
-    <div id="panel-upload" class="tab-panel active">
-      <div class="dropzone" id="dropzone">
-        <div class="dropzone-icon">📄</div>
+    <div id="panel-upload" class="tab-panel active" role="tabpanel" aria-labelledby="tab-upload">
+      <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Drop a file here or click to browse">
+        <div class="dropzone-icon" aria-hidden="true">📄</div>
         <div class="dropzone-text">Drop a <strong>.pdf</strong> or <strong>.md</strong> file here, or <strong>click to browse</strong></div>
         <div class="dropzone-file hidden" id="file-name"></div>
-        <input type="file" id="file-input" accept=".pdf,.md">
+        <input type="file" id="file-input" accept=".pdf,.md" aria-label="Upload a PDF or Markdown file">
       </div>
     </div>
 
-    <div id="panel-existing" class="tab-panel">
+    <div id="panel-existing" class="tab-panel" role="tabpanel" aria-labelledby="tab-existing">
       <div class="source-list" id="source-list">
         <div class="source-note">Loading sources…</div>
       </div>
@@ -522,7 +543,7 @@ body::before {
 
   <!-- ── Options ─────────────────────────────────── -->
   <div class="section">
-    <div class="section-label">Options</div>
+    <h2 class="section-label">Options</h2>
 
     <div class="field">
       <label for="output-dir">Output directory</label>
@@ -554,11 +575,12 @@ body::before {
 
   <!-- ── Results ─────────────────────────────────── -->
   <div class="section hidden" id="results-section">
-    <div class="section-label">Results</div>
-    <div id="results" class="results"></div>
+    <h2 class="section-label">Results</h2>
+    <div id="results" class="results" aria-live="polite"></div>
   </div>
 
 </div>
+</main>
 
 <script>
 /* ── State ──────────────────────────────────────────── */
@@ -579,14 +601,26 @@ const resultsSection = $('#results-section');
 const resultsDiv = $('#results');
 
 /* ── Tabs ───────────────────────────────────────────── */
-$$('.tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    $$('.tab').forEach(t => t.classList.remove('active'));
-    $$('.tab-panel').forEach(p => p.classList.remove('active'));
-    tab.classList.add('active');
-    $(`#panel-${tab.dataset.tab}`).classList.add('active');
+const tabs = Array.from($$('.tab'));
+function activateTab(tab) {
+  tabs.forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected', 'false'); t.setAttribute('tabindex', '-1'); });
+  $$('.tab-panel').forEach(p => p.classList.remove('active'));
+  tab.classList.add('active');
+  tab.setAttribute('aria-selected', 'true');
+  tab.setAttribute('tabindex', '0');
+  $(`#panel-${tab.dataset.tab}`).classList.add('active');
+  tab.focus();
+}
+tabs.forEach(tab => {
+  tab.addEventListener('click', () => activateTab(tab));
+  tab.addEventListener('keydown', (e) => {
+    const idx = tabs.indexOf(tab);
+    if (e.key === 'ArrowRight') { e.preventDefault(); activateTab(tabs[(idx + 1) % tabs.length]); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); activateTab(tabs[(idx - 1 + tabs.length) % tabs.length]); }
   });
 });
+// Set initial tabindex state
+tabs.forEach(t => t.setAttribute('tabindex', t.classList.contains('active') ? '0' : '-1'));
 
 /* ── Drag & drop ────────────────────────────────────── */
 dropzone.addEventListener('dragover', (e) => {
@@ -607,6 +641,13 @@ dropzone.addEventListener('drop', (e) => {
 
 fileInput.addEventListener('change', () => {
   if (fileInput.files.length > 0) setFile(fileInput.files[0]);
+});
+
+dropzone.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    fileInput.click();
+  }
 });
 
 function setFile(file) {
