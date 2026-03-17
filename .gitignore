@@ -15,4 +15,5 @@ build/
 sources/
 output/
 .claude/
+.omc/
 *.bak

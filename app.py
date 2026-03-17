@@ -21,6 +21,9 @@ from pathlib import Path
 # Project root = directory containing this script
 PROJECT_ROOT = Path(__file__).resolve().parent
 
+# Maximum request body size (50 MB)
+MAX_BODY_SIZE = 50 * 1024 * 1024
+
 # Add project root to sys.path so imports work
 sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -150,6 +153,8 @@ class ConverterHandler(BaseHTTPRequestHandler):
 
         if path == "/":
             self._serve_index()
+        elif path == "/adversaries":
+            self._serve_adversaries()
         elif path == "/api/sources":
             self._handle_sources()
         else:
@@ -171,6 +176,20 @@ class ConverterHandler(BaseHTTPRequestHandler):
             self._send_text("index.html not found", status=404)
             return
         content = index_path.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(content)))
+        self.end_headers()
+        self.wfile.write(content)
+
+    # -- GET /adversaries : serve adversaries.html -------------------------
+
+    def _serve_adversaries(self):
+        adv_path = PROJECT_ROOT / "adversaries.html"
+        if not adv_path.exists():
+            self._send_text("adversaries.html not found. Run generate_adversaries_html.py first.", status=404)
+            return
+        content = adv_path.read_bytes()
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(content)))
@@ -306,11 +325,11 @@ class ConverterHandler(BaseHTTPRequestHandler):
                     os.unlink(tmp_path)
 
         except ImportError as e:
-            self._send_json({"success": False, "error": str(e)}, status=200)
+            self._send_json({"success": False, "error": str(e)}, status=400)
         except ValueError as e:
-            self._send_json({"success": False, "error": str(e)}, status=200)
+            self._send_json({"success": False, "error": str(e)}, status=400)
         except Exception as e:
-            self._send_json({"success": False, "error": f"Conversion failed: {e}"}, status=200)
+            self._send_json({"success": False, "error": f"Conversion failed: {e}"}, status=500)
 
     # -- Helpers -----------------------------------------------------------
 
@@ -351,8 +370,13 @@ class ConverterHandler(BaseHTTPRequestHandler):
         raise ValueError("No source file provided. Upload a file or select an existing source.")
 
     def _read_body(self) -> bytes:
-        """Read the full request body."""
+        """Read the full request body, enforcing MAX_BODY_SIZE."""
         length = int(self.headers.get("Content-Length", 0))
+        if length > MAX_BODY_SIZE:
+            raise ValueError(
+                f"Request body too large ({length} bytes). "
+                f"Maximum allowed: {MAX_BODY_SIZE} bytes."
+            )
         return self.rfile.read(length)
 
     def _send_json(self, data: dict, status: int = 200):

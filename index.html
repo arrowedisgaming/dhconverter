@@ -15,7 +15,7 @@
   --border-accent: #f0a50044;
   --text: #e6edf3;
   --text-dim: #8b949e;
-  --text-muted: #7a828b;
+  --text-muted: #9198a1;
   --accent: #f0a500;
   --accent-glow: #f0a50033;
   --accent-dim: #c48800;
@@ -26,34 +26,15 @@
   --shadow: 0 2px 12px #00000040;
   --shadow-lg: 0 8px 32px #00000060;
   --transition: 0.2s ease;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg-deep: #f0ede6;
-    --bg-card: #ffffff;
-    --bg-inset: #f6f4ef;
-    --bg-hover: #eae7df;
-    --border: #d0cdc4;
-    --border-accent: #d4940033;
-    --text: #24292f;
-    --text-dim: #57606a;
-    --text-muted: #656d76;
-    --accent: #c48800;
-    --accent-glow: #c4880022;
-    --accent-dim: #a07000;
-    --danger: #cf222e;
-    --success: #1a7f37;
-    --shadow: 0 2px 12px #0000001a;
-    --shadow-lg: 0 8px 32px #00000020;
-  }
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+  --accent-text: var(--accent);
 }
 
 /* ── Reset & base ──────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-sans);
   background: var(--bg-deep);
   color: var(--text);
   line-height: 1.5;
@@ -135,7 +116,7 @@ body::before {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--accent);
+  color: var(--accent-text);
   margin-bottom: 0.75rem;
 }
 
@@ -488,6 +469,29 @@ body::before {
   top: 0;
 }
 
+/* ── Focus indicators (WCAG 2.4.7) ────────────────── */
+.btn:focus-visible,
+.tab:focus-visible,
+.dropzone:focus-visible,
+.field input:focus-visible,
+.check-item input:focus-visible,
+.source-item input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Inline errors ────────────────────────────────── */
+.inline-error {
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--danger);
+  background: var(--bg-inset);
+  color: var(--danger);
+  margin-top: 0.75rem;
+}
+
 /* ── Utilities ─────────────────────────────────────── */
 .hidden { display: none !important; }
 
@@ -550,20 +554,25 @@ body::before {
       <input type="text" id="output-dir" value="output/web-convert">
     </div>
 
-    <div class="field">
-      <label>Format</label>
+    <fieldset class="field" style="border:none;padding:0;margin:0 0 0.75rem">
+      <legend style="font-size:0.8125rem;font-weight:500;margin-bottom:0.25rem;color:var(--text-dim)">Format</legend>
       <div class="checkgroup">
         <label class="check-item"><input type="checkbox" id="opt-markdown" checked> Markdown files</label>
         <label class="check-item"><input type="checkbox" id="opt-beastvault"> BeastVault JSON</label>
         <label class="check-item"><input type="checkbox" id="opt-index"> Master Index</label>
       </div>
-    </div>
+    </fieldset>
 
     <div class="field">
       <div class="checkgroup">
         <label class="check-item"><input type="checkbox" id="opt-overwrite"> Overwrite existing files</label>
       </div>
     </div>
+  </div>
+
+  <!-- ── Inline error ──────────────────────────────── -->
+  <div class="section hidden" id="inline-error-section">
+    <div class="inline-error" id="inline-error" role="alert"></div>
   </div>
 
   <!-- ── Actions ─────────────────────────────────── -->
@@ -653,7 +662,7 @@ dropzone.addEventListener('keydown', (e) => {
 function setFile(file) {
   const ext = file.name.split('.').pop().toLowerCase();
   if (ext !== 'pdf' && ext !== 'md') {
-    alert('Unsupported file type. Please select a .pdf or .md file.');
+    showInlineError('Unsupported file type. Please select a .pdf or .md file.');
     return;
   }
   selectedFile = file;
@@ -714,7 +723,7 @@ loadSources();
 /* ── Convert ────────────────────────────────────────── */
 btnConvert.addEventListener('click', async () => {
   if (!selectedFile && !selectedSource) {
-    alert('Please select or upload a source file first.');
+    showInlineError('Please select or upload a source file first.');
     return;
   }
 
@@ -750,9 +759,13 @@ btnConvert.addEventListener('click', async () => {
     }
 
     const data = await res.json();
-    renderConvertResults(data);
+    if (!res.ok) {
+      renderConvertResults({ success: false, error: data.error || `Server error (${res.status})` });
+    } else {
+      renderConvertResults(data);
+    }
   } catch (e) {
-    resultsDiv.innerHTML = `<div class="result-summary error">Request failed: ${e.message}</div>`;
+    resultsDiv.innerHTML = `<div class="result-summary error">Request failed: ${esc(e.message)}</div>`;
   } finally {
     btnConvert.disabled = false;
     btnConvert.innerHTML = 'Convert';
@@ -793,6 +806,15 @@ function renderConvertResults(data) {
 
   html += '</div>';
   resultsDiv.innerHTML = html;
+}
+
+/* ── Inline error helper ────────────────────────────── */
+function showInlineError(msg) {
+  const section = $('#inline-error-section');
+  const el = $('#inline-error');
+  el.textContent = msg;
+  section.classList.remove('hidden');
+  setTimeout(() => section.classList.add('hidden'), 5000);
 }
 
 /* ── Util ───────────────────────────────────────────── */

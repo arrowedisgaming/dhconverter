@@ -155,12 +155,37 @@ def generate_html(headers: list[str], rows: list[dict], srd_links: dict[str, str
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Daggerheart Adversaries</title>
 <style>
-* {{ margin: 0; padding: 0; box-sizing: border-box; }}
+/* ── Theme tokens (shared with index.html) ──── */
+:root {{
+    --bg-deep: #0d1117;
+    --bg-card: #161b22;
+    --bg-inset: #1c2333;
+    --bg-hover: #21293a;
+    --border: #30363d;
+    --border-accent: #f0a50044;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --text-muted: #9198a1;
+    --accent: #f0a500;
+    --accent-glow: #f0a50033;
+    --accent-dim: #c48800;
+    --danger: #f85149;
+    --success: #3fb950;
+    --radius: 8px;
+    --radius-sm: 5px;
+    --shadow: 0 2px 12px #00000040;
+    --shadow-lg: 0 8px 32px #00000060;
+    --transition: 0.2s ease;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+}}
+
+*, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
 
 body {{
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: #1a1a2e;
-    color: #e0e0e0;
+    font-family: var(--font-sans);
+    background: var(--bg-deep);
+    color: var(--text);
+    line-height: 1.5;
     min-height: 100vh;
 }}
 
@@ -172,7 +197,7 @@ body {{
 
 h1 {{
     text-align: center;
-    color: #c9a84c;
+    color: var(--accent);
     font-size: 1.8rem;
     margin-bottom: 1rem;
     font-weight: 700;
@@ -180,14 +205,16 @@ h1 {{
 }}
 
 .controls {{
-    background: #16213e;
-    border-radius: 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
     padding: 1rem;
     margin-bottom: 1rem;
     display: flex;
     flex-wrap: wrap;
     gap: 0.75rem;
     align-items: end;
+    box-shadow: var(--shadow);
 }}
 
 .control-group {{
@@ -198,7 +225,7 @@ h1 {{
 
 .control-group label {{
     font-size: 0.75rem;
-    color: #a3b1bf;
+    color: var(--text-dim);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     font-weight: 600;
@@ -211,28 +238,29 @@ h1 {{
 #search {{
     width: 100%;
     padding: 0.5rem 0.75rem;
-    border: 1px solid #2a3a5e;
-    border-radius: 6px;
-    background: #0f1a30;
-    color: #e0e0e0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-inset);
+    color: var(--text);
     font-size: 0.95rem;
     outline: none;
-    transition: border-color 0.2s;
+    transition: border-color var(--transition);
 }}
 
 #search:focus {{
-    border-color: #c9a84c;
+    border-color: var(--accent);
 }}
 
 select, .filter-input {{
     padding: 0.5rem 0.75rem;
-    border: 1px solid #2a3a5e;
-    border-radius: 6px;
-    background: #0f1a30;
-    color: #e0e0e0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-inset);
+    color: var(--text);
     font-size: 0.9rem;
+    font-family: var(--font-sans);
     outline: none;
-    transition: border-color 0.2s;
+    transition: border-color var(--transition);
 }}
 
 select {{
@@ -275,22 +303,67 @@ select {{
 }}
 
 select:focus, .filter-input:focus {{
-    border-color: #c9a84c;
+    border-color: var(--accent);
+}}
+
+/* ── Focus indicators (WCAG 2.4.7) ───────────── */
+select:focus-visible, .filter-input:focus-visible, #search:focus-visible {{
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}}
+
+.btn-clear:focus-visible {{
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}}
+
+/* ── Clear Filters button ─────────────────────── */
+.btn-clear {{
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-inset);
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    align-self: end;
+    transition: background var(--transition), color var(--transition), border-color var(--transition);
+    white-space: nowrap;
+}}
+
+.btn-clear:hover {{
+    background: var(--bg-hover);
+    color: var(--text);
+    border-color: var(--text-muted);
 }}
 
 .count {{
     font-size: 0.85rem;
-    color: #a3b1bf;
+    color: var(--text-dim);
     padding: 0.5rem 0;
     align-self: end;
     white-space: nowrap;
 }}
 
+/* ── Table scroll affordance ──────────────────── */
 .table-wrap {{
     overflow-x: auto;
-    border-radius: 8px;
-    border: 1px solid #2a3a5e;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
     -webkit-overflow-scrolling: touch;
+    position: relative;
+    box-shadow: var(--shadow);
+}}
+
+.table-wrap.has-overflow {{
+    mask-image: linear-gradient(to right, black calc(100% - 2rem), transparent);
+    -webkit-mask-image: linear-gradient(to right, black calc(100% - 2rem), transparent);
+}}
+
+.table-wrap.scrolled {{
+    mask-image: none;
+    -webkit-mask-image: none;
 }}
 
 table {{
@@ -307,29 +380,34 @@ thead {{
 }}
 
 th {{
-    background: #16213e;
-    color: #c9a84c;
+    background: var(--bg-card);
+    color: var(--accent);
     padding: 0.6rem 0.75rem;
     text-align: left;
     cursor: pointer;
     user-select: none;
     white-space: nowrap;
-    border-bottom: 2px solid #c9a84c;
+    border-bottom: 2px solid var(--accent);
     font-weight: 600;
     font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    transition: background 0.15s;
+    transition: background var(--transition);
 }}
 
 th:hover {{
-    background: #1e2d52;
+    background: var(--bg-hover);
 }}
 
 th .sort-arrow {{
     margin-left: 4px;
-    opacity: 0.3;
+    opacity: 0.5;
     font-size: 0.7rem;
+    transition: opacity var(--transition);
+}}
+
+th:hover .sort-arrow {{
+    opacity: 0.8;
 }}
 
 th.sort-asc .sort-arrow,
@@ -339,37 +417,37 @@ th.sort-desc .sort-arrow {{
 
 td {{
     padding: 0.5rem 0.75rem;
-    border-bottom: 1px solid #1e2d4a;
+    border-bottom: 1px solid var(--border);
     white-space: nowrap;
 }}
 
 tr:hover td {{
-    background: #1a2744;
+    background: var(--bg-hover);
 }}
 
 tr:nth-child(even) td {{
-    background: #111b30;
+    background: var(--bg-inset);
 }}
 
 tr:nth-child(even):hover td {{
-    background: #1a2744;
+    background: var(--bg-hover);
 }}
 
 td:first-child {{
     font-weight: 600;
-    color: #e8d5a3;
+    color: var(--accent-dim);
 }}
 
 td:first-child a {{
-    color: #e8d5a3;
+    color: var(--accent-dim);
     text-decoration: none;
-    border-bottom: 1px dotted #c9a84c55;
-    transition: border-color 0.2s, color 0.2s;
+    border-bottom: 1px dotted var(--border-accent);
+    transition: border-color var(--transition), color var(--transition);
 }}
 
 td:first-child a:hover {{
-    color: #c9a84c;
-    border-bottom-color: #c9a84c;
+    color: var(--accent);
+    border-bottom-color: var(--accent);
 }}
 
 td.num {{
@@ -384,18 +462,27 @@ th.num {{
 .no-results {{
     text-align: center;
     padding: 2rem;
-    color: #667;
+    color: var(--text-muted);
     font-style: italic;
+}}
+
+/* ── Loading placeholder ──────────────────────── */
+.loading-msg {{
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-dim);
+    font-size: 0.95rem;
 }}
 
 footer {{
     margin-top: 2rem;
     padding: 1.5rem;
-    background: #16213e;
-    border-radius: 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
     font-size: 0.8rem;
     line-height: 1.6;
-    color: #a3b1bf;
+    color: var(--text-dim);
 }}
 
 footer p {{
@@ -407,23 +494,23 @@ footer p:last-child {{
 }}
 
 footer a {{
-    color: #c9a84c;
+    color: var(--accent);
     text-decoration: none;
-    border-bottom: 1px dotted #c9a84c55;
+    border-bottom: 1px dotted var(--border-accent);
 }}
 
 footer a:hover {{
-    border-bottom-color: #c9a84c;
+    border-bottom-color: var(--accent);
 }}
 
 footer .attribution {{
-    border-top: 1px solid #2a3a5e;
+    border-top: 1px solid var(--border);
     padding-top: 0.75rem;
     margin-top: 0.75rem;
 }}
 
-th:focus {{
-    outline: 2px solid #c9a84c;
+th:focus-visible {{
+    outline: 2px solid var(--accent);
     outline-offset: -2px;
 }}
 
@@ -443,12 +530,13 @@ th:focus {{
     position: absolute;
     top: -40px;
     left: 0;
-    background: #c9a84c;
-    color: #1a1a2e;
+    background: var(--accent);
+    color: var(--bg-deep);
     padding: 0.5rem 1rem;
     z-index: 100;
     font-weight: 600;
     text-decoration: none;
+    border-radius: 0 0 var(--radius-sm) 0;
 }}
 
 .skip-link:focus {{
@@ -472,7 +560,8 @@ th:focus {{
     <h2 class="sr-only">Filters</h2>
     <div class="controls" id="controls"></div>
     <div class="count" id="count" aria-live="polite" role="status"></div>
-    <div class="table-wrap">
+    <div class="loading-msg" id="loading">Loading adversary data&hellip;</div>
+    <div class="table-wrap" id="table-wrap">
         <table>
             <caption class="sr-only">Daggerheart adversary statistics</caption>
             <thead><tr id="thead"></tr></thead>
@@ -513,9 +602,25 @@ let textFilters = {{}};
 let debounceTimer = null;
 
 function init() {{
+    const loadingEl = document.getElementById('loading');
+    if (loadingEl) loadingEl.remove();
     buildControls();
     buildHeader();
     render();
+    // Scroll affordance for mobile table
+    const wrap = document.getElementById('table-wrap');
+    if (wrap) {{
+        const checkOverflow = () => {{
+            const hasOverflow = wrap.scrollWidth > wrap.clientWidth;
+            wrap.classList.toggle('has-overflow', hasOverflow && wrap.scrollLeft < wrap.scrollWidth - wrap.clientWidth - 5);
+        }};
+        wrap.addEventListener('scroll', () => {{
+            wrap.classList.toggle('scrolled', wrap.scrollLeft > 10);
+            checkOverflow();
+        }});
+        window.addEventListener('resize', checkOverflow);
+        checkOverflow();
+    }}
 }}
 
 function buildControls() {{
@@ -533,7 +638,7 @@ function buildControls() {{
         g.className = 'control-group';
         let opts = '<option value="">All</option>';
         FILTER_OPTIONS[col].forEach(v => {{
-            opts += `<option value="${{v}}">${{v}}</option>`;
+            opts += `<option value="${{esc(v)}}">${{esc(v)}}</option>`;
         }});
         g.innerHTML = `<label for="filter-${{col}}">${{DISPLAY[col]}}</label><select id="filter-${{col}}">${{opts}}</select>`;
         ctrl.appendChild(g);
@@ -562,6 +667,37 @@ function buildControls() {{
         g.innerHTML = `<label for="filter-${{col}}">${{DISPLAY[col]}}</label><input type="text" class="filter-input text-filter" id="filter-${{col}}" placeholder="e.g. d12">`;
         ctrl.appendChild(g);
     }});
+
+    // Clear Filters button
+    const clrBtn = document.createElement('button');
+    clrBtn.className = 'btn-clear';
+    clrBtn.textContent = 'Clear Filters';
+    clrBtn.addEventListener('click', () => {{
+        document.getElementById('search').value = '';
+        searchTerm = '';
+        DROPDOWNS.forEach(col => {{
+            const el = document.getElementById(`filter-${{col}}`);
+            el.value = '';
+            dropdownFilters[col] = '';
+        }});
+        NUMERIC_FILTERS.forEach(col => {{
+            const el = document.getElementById(`filter-${{col}}`);
+            el.value = '';
+            numericFilters[col] = '';
+        }});
+        RANGE_FILTERS.forEach(col => {{
+            document.getElementById(`filter-${{col}}`).value = '';
+            document.getElementById(`filter-${{col}}-mode`).value = 'gte';
+            rangeFilters[col] = {{mode: 'gte', value: ''}};
+        }});
+        TEXT_FILTERS.forEach(col => {{
+            const el = document.getElementById(`filter-${{col}}`);
+            el.value = '';
+            textFilters[col] = '';
+        }});
+        render();
+    }});
+    ctrl.appendChild(clrBtn);
 
     // Event listeners
     document.getElementById('search').addEventListener('input', e => {{
