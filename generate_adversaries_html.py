@@ -155,28 +155,30 @@ def generate_html(headers: list[str], rows: list[dict], srd_links: dict[str, str
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Daggerheart Adversaries</title>
 <style>
-/* ── Theme tokens (shared with index.html) ──── */
+/* ── Theme tokens ────────────────────────────── */
 :root {{
-    --bg-deep: #0d1117;
-    --bg-card: #161b22;
-    --bg-inset: #1c2333;
-    --bg-hover: #21293a;
-    --border: #30363d;
-    --border-accent: #f0a50044;
-    --text: #e6edf3;
-    --text-dim: #8b949e;
-    --text-muted: #9198a1;
-    --accent: #f0a500;
-    --accent-glow: #f0a50033;
-    --accent-dim: #c48800;
-    --danger: #f85149;
-    --success: #3fb950;
+    --bg-deep: #1a1614;
+    --bg-card: #231f1b;
+    --bg-inset: #2a2420;
+    --bg-hover: #342e28;
+    --border: #3d3530;
+    --border-accent: #d4a93444;
+    --text: #ede4d6;
+    --text-dim: #9a8e80;
+    --text-muted: #7a6f63;
+    --accent: #d4a934;
+    --accent-glow: #d4a93433;
+    --accent-dim: #b8922a;
+    --accent-secondary: #a04040;
+    --danger: #c45a4a;
+    --success: #6b8a6b;
     --radius: 8px;
     --radius-sm: 5px;
     --shadow: 0 2px 12px #00000040;
     --shadow-lg: 0 8px 32px #00000060;
     --transition: 0.2s ease;
     --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+    --font-display: Georgia, "Palatino Linotype", "Book Antiqua", serif;
 }}
 
 *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
@@ -189,6 +191,18 @@ body {{
     min-height: 100vh;
 }}
 
+/* subtle grain overlay */
+body::before {{
+    content: '';
+    position: fixed;
+    inset: 0;
+    opacity: 0.025;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 256px;
+    pointer-events: none;
+    z-index: 9999;
+}}
+
 .container {{
     max-width: 1400px;
     margin: 0 auto;
@@ -198,23 +212,56 @@ body {{
 h1 {{
     text-align: center;
     color: var(--accent);
-    font-size: 1.8rem;
-    margin-bottom: 1rem;
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 2rem;
+    margin-bottom: 1.25rem;
     font-weight: 700;
-    letter-spacing: 0.05em;
+    text-shadow: 0 2px 8px #d4a93440;
+}}
+
+h1 .dagger {{
+    font-style: normal;
+    font-size: 1.1em;
+    margin-right: 0.15em;
+}}
+
+h1::after {{
+    content: '';
+    display: block;
+    width: 60px;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+    margin: 0.5rem auto 0;
+    border-radius: 1px;
 }}
 
 .controls {{
     background: var(--bg-card);
     border: 1px solid var(--border);
+    border-top: 2px solid var(--accent);
     border-radius: var(--radius);
-    padding: 1rem;
+    padding: 1rem 1.25rem;
     margin-bottom: 1rem;
     display: flex;
     flex-wrap: wrap;
     gap: 0.75rem;
     align-items: end;
     box-shadow: var(--shadow);
+}}
+
+.filter-section {{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: end;
+    padding-right: 1.25rem;
+    border-right: 1px solid var(--border);
+}}
+
+.filter-section:last-of-type {{
+    border-right: none;
+    padding-right: 0;
 }}
 
 .control-group {{
@@ -224,10 +271,8 @@ h1 {{
 }}
 
 .control-group label {{
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
     font-weight: 600;
 }}
 
@@ -237,12 +282,12 @@ h1 {{
 
 #search {{
     width: 100%;
-    padding: 0.5rem 0.75rem;
+    padding: 0.6rem 1rem 0.6rem 2.25rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    background: var(--bg-inset);
+    background: var(--bg-inset) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239a8e80' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E") no-repeat 0.75rem center;
     color: var(--text);
-    font-size: 0.95rem;
+    font-size: 1rem;
     outline: none;
     transition: border-color var(--transition);
 }}
@@ -293,13 +338,13 @@ select {{
 }}
 
 .range-filter select {{
-    min-width: 55px;
+    min-width: 65px;
     padding: 0.5rem 0.3rem;
-    font-size: 0.8rem;
+    font-size: 0.85rem;
 }}
 
 .range-filter .filter-input {{
-    width: 65px;
+    width: 80px;
 }}
 
 select:focus, .filter-input:focus {{
@@ -342,7 +387,7 @@ select:focus-visible, .filter-input:focus-visible, #search:focus-visible {{
     font-size: 0.85rem;
     color: var(--text-dim);
     padding: 0.5rem 0;
-    align-self: end;
+    text-align: right;
     white-space: nowrap;
 }}
 
@@ -381,13 +426,13 @@ thead {{
 
 th {{
     background: var(--bg-card);
-    color: var(--accent);
-    padding: 0.6rem 0.75rem;
+    color: var(--text);
+    padding: 0.6rem 0.85rem;
     text-align: left;
     cursor: pointer;
     user-select: none;
     white-space: nowrap;
-    border-bottom: 2px solid var(--accent);
+    border-bottom: 2px solid var(--accent-secondary);
     font-weight: 600;
     font-size: 0.8rem;
     text-transform: uppercase;
@@ -416,7 +461,7 @@ th.sort-desc .sort-arrow {{
 }}
 
 td {{
-    padding: 0.5rem 0.75rem;
+    padding: 0.55rem 0.85rem;
     border-bottom: 1px solid var(--border);
     white-space: nowrap;
 }}
@@ -425,8 +470,12 @@ tr:hover td {{
     background: var(--bg-hover);
 }}
 
+tr:hover td:first-child {{
+    box-shadow: inset 3px 0 0 var(--accent);
+}}
+
 tr:nth-child(even) td {{
-    background: var(--bg-inset);
+    background: rgba(255, 255, 255, 0.015);
 }}
 
 tr:nth-child(even):hover td {{
@@ -435,18 +484,18 @@ tr:nth-child(even):hover td {{
 
 td:first-child {{
     font-weight: 600;
-    color: var(--accent-dim);
+    color: var(--text);
+    font-size: 0.95rem;
 }}
 
 td:first-child a {{
-    color: var(--accent-dim);
+    color: var(--accent);
     text-decoration: none;
-    border-bottom: 1px dotted var(--border-accent);
+    border-bottom: 1px solid transparent;
     transition: border-color var(--transition), color var(--transition);
 }}
 
 td:first-child a:hover {{
-    color: var(--accent);
     border-bottom-color: var(--accent);
 }}
 
@@ -461,9 +510,10 @@ th.num {{
 
 .no-results {{
     text-align: center;
-    padding: 2rem;
+    padding: 3rem 2rem;
     color: var(--text-muted);
     font-style: italic;
+    font-size: 1rem;
 }}
 
 /* ── Loading placeholder ──────────────────────── */
@@ -476,13 +526,11 @@ th.num {{
 
 footer {{
     margin-top: 2rem;
-    padding: 1.5rem;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    font-size: 0.8rem;
+    padding: 1.25rem 1.5rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.78rem;
     line-height: 1.6;
-    color: var(--text-dim);
+    color: var(--text-muted);
 }}
 
 footer p {{
@@ -546,6 +594,17 @@ th:focus-visible {{
 @media (max-width: 600px) {{
     h1 {{ font-size: 1.3rem; }}
     .controls {{ padding: 0.75rem; gap: 0.5rem; }}
+    .filter-section {{
+        flex: 1 1 100%;
+        padding-right: 0;
+        border-right: none;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid var(--border);
+    }}
+    .filter-section:last-of-type {{
+        border-bottom: none;
+        padding-bottom: 0;
+    }}
     .control-group {{ flex: 1 1 45%; }}
     .search-group {{ flex: 1 1 100%; }}
     table {{ font-size: 0.8rem; }}
@@ -556,7 +615,7 @@ th:focus-visible {{
 <body>
 <a class="skip-link" href="#tbody">Skip to adversary table</a>
 <main class="container">
-    <h1>Daggerheart Adversaries</h1>
+    <h1><span class="dagger" aria-hidden="true">&#x2694;</span> Daggerheart Adversaries</h1>
     <h2 class="sr-only">Filters</h2>
     <div class="controls" id="controls"></div>
     <div class="count" id="count" aria-live="polite" role="status"></div>
@@ -626,47 +685,113 @@ function init() {{
 function buildControls() {{
     const ctrl = document.getElementById('controls');
 
-    // Global search
+    // Global search (standalone, full width)
     const sg = document.createElement('div');
     sg.className = 'control-group search-group';
-    sg.innerHTML = '<label for="search">Search</label><input type="text" id="search" placeholder="Search by name...">';
+    const searchLabel = document.createElement('label');
+    searchLabel.setAttribute('for', 'search');
+    searchLabel.textContent = 'Search';
+    const searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.id = 'search';
+    searchInput.placeholder = 'Search by name\u2026';
+    sg.appendChild(searchLabel);
+    sg.appendChild(searchInput);
     ctrl.appendChild(sg);
 
-    // Dropdown filters
+    // Classification section (dropdowns)
+    const classSection = document.createElement('div');
+    classSection.className = 'filter-section';
     DROPDOWNS.forEach(col => {{
         const g = document.createElement('div');
         g.className = 'control-group';
-        let opts = '<option value="">All</option>';
+        const lbl = document.createElement('label');
+        lbl.setAttribute('for', 'filter-' + col);
+        lbl.textContent = DISPLAY[col];
+        const sel = document.createElement('select');
+        sel.id = 'filter-' + col;
+        const allOpt = document.createElement('option');
+        allOpt.value = '';
+        allOpt.textContent = 'All';
+        sel.appendChild(allOpt);
         FILTER_OPTIONS[col].forEach(v => {{
-            opts += `<option value="${{esc(v)}}">${{esc(v)}}</option>`;
+            const o = document.createElement('option');
+            o.value = v;
+            o.textContent = v;
+            sel.appendChild(o);
         }});
-        g.innerHTML = `<label for="filter-${{col}}">${{DISPLAY[col]}}</label><select id="filter-${{col}}">${{opts}}</select>`;
-        ctrl.appendChild(g);
+        g.appendChild(lbl);
+        g.appendChild(sel);
+        classSection.appendChild(g);
     }});
+    ctrl.appendChild(classSection);
 
-    // Numeric exact-match filters
+    // Statistics section (numeric, range, text filters)
+    const statsSection = document.createElement('div');
+    statsSection.className = 'filter-section';
+
     NUMERIC_FILTERS.forEach(col => {{
         const g = document.createElement('div');
         g.className = 'control-group';
-        g.innerHTML = `<label for="filter-${{col}}">${{DISPLAY[col]}}</label><input type="number" class="filter-input" id="filter-${{col}}" placeholder="Any">`;
-        ctrl.appendChild(g);
+        const lbl = document.createElement('label');
+        lbl.setAttribute('for', 'filter-' + col);
+        lbl.textContent = DISPLAY[col];
+        const inp = document.createElement('input');
+        inp.type = 'number';
+        inp.className = 'filter-input';
+        inp.id = 'filter-' + col;
+        inp.placeholder = 'Any';
+        g.appendChild(lbl);
+        g.appendChild(inp);
+        statsSection.appendChild(g);
     }});
 
-    // Range filters (above / below / exactly)
     RANGE_FILTERS.forEach(col => {{
         const g = document.createElement('div');
         g.className = 'control-group';
-        g.innerHTML = `<label for="filter-${{col}}">${{DISPLAY[col]}}</label><div class="range-filter"><select id="filter-${{col}}-mode" aria-label="${{DISPLAY[col]}} comparison mode"><option value="gte">\u2265</option><option value="lte">\u2264</option><option value="eq">=</option></select><input type="number" class="filter-input" id="filter-${{col}}" placeholder="Any"></div>`;
-        ctrl.appendChild(g);
+        const lbl = document.createElement('label');
+        lbl.setAttribute('for', 'filter-' + col);
+        lbl.textContent = DISPLAY[col];
+        const rangeDiv = document.createElement('div');
+        rangeDiv.className = 'range-filter';
+        const modeSel = document.createElement('select');
+        modeSel.id = 'filter-' + col + '-mode';
+        modeSel.setAttribute('aria-label', DISPLAY[col] + ' comparison mode');
+        [['gte', '\u2265'], ['lte', '\u2264'], ['eq', '=']].forEach(([val, txt]) => {{
+            const o = document.createElement('option');
+            o.value = val;
+            o.textContent = txt;
+            modeSel.appendChild(o);
+        }});
+        const inp = document.createElement('input');
+        inp.type = 'number';
+        inp.className = 'filter-input';
+        inp.id = 'filter-' + col;
+        inp.placeholder = 'Any';
+        rangeDiv.appendChild(modeSel);
+        rangeDiv.appendChild(inp);
+        g.appendChild(lbl);
+        g.appendChild(rangeDiv);
+        statsSection.appendChild(g);
     }});
 
-    // Text substring filters
     TEXT_FILTERS.forEach(col => {{
         const g = document.createElement('div');
         g.className = 'control-group';
-        g.innerHTML = `<label for="filter-${{col}}">${{DISPLAY[col]}}</label><input type="text" class="filter-input text-filter" id="filter-${{col}}" placeholder="e.g. d12">`;
-        ctrl.appendChild(g);
+        const lbl = document.createElement('label');
+        lbl.setAttribute('for', 'filter-' + col);
+        lbl.textContent = DISPLAY[col];
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.className = 'filter-input text-filter';
+        inp.id = 'filter-' + col;
+        inp.placeholder = 'e.g. d12';
+        g.appendChild(lbl);
+        g.appendChild(inp);
+        statsSection.appendChild(g);
     }});
+
+    ctrl.appendChild(statsSection);
 
     // Clear Filters button
     const clrBtn = document.createElement('button');
@@ -676,22 +801,22 @@ function buildControls() {{
         document.getElementById('search').value = '';
         searchTerm = '';
         DROPDOWNS.forEach(col => {{
-            const el = document.getElementById(`filter-${{col}}`);
+            const el = document.getElementById('filter-' + col);
             el.value = '';
             dropdownFilters[col] = '';
         }});
         NUMERIC_FILTERS.forEach(col => {{
-            const el = document.getElementById(`filter-${{col}}`);
+            const el = document.getElementById('filter-' + col);
             el.value = '';
             numericFilters[col] = '';
         }});
         RANGE_FILTERS.forEach(col => {{
-            document.getElementById(`filter-${{col}}`).value = '';
-            document.getElementById(`filter-${{col}}-mode`).value = 'gte';
+            document.getElementById('filter-' + col).value = '';
+            document.getElementById('filter-' + col + '-mode').value = 'gte';
             rangeFilters[col] = {{mode: 'gte', value: ''}};
         }});
         TEXT_FILTERS.forEach(col => {{
-            const el = document.getElementById(`filter-${{col}}`);
+            const el = document.getElementById('filter-' + col);
             el.value = '';
             textFilters[col] = '';
         }});
@@ -709,26 +834,26 @@ function buildControls() {{
     }});
 
     DROPDOWNS.forEach(col => {{
-        document.getElementById(`filter-${{col}}`).addEventListener('change', e => {{
+        document.getElementById('filter-' + col).addEventListener('change', e => {{
             dropdownFilters[col] = e.target.value;
             render();
         }});
     }});
 
     NUMERIC_FILTERS.forEach(col => {{
-        document.getElementById(`filter-${{col}}`).addEventListener('input', e => {{
+        document.getElementById('filter-' + col).addEventListener('input', e => {{
             numericFilters[col] = e.target.value;
             render();
         }});
     }});
 
     RANGE_FILTERS.forEach(col => {{
-        document.getElementById(`filter-${{col}}`).addEventListener('input', e => {{
+        document.getElementById('filter-' + col).addEventListener('input', e => {{
             if (!rangeFilters[col]) rangeFilters[col] = {{mode: 'gte', value: ''}};
             rangeFilters[col].value = e.target.value;
             render();
         }});
-        document.getElementById(`filter-${{col}}-mode`).addEventListener('change', e => {{
+        document.getElementById('filter-' + col + '-mode').addEventListener('change', e => {{
             if (!rangeFilters[col]) rangeFilters[col] = {{mode: 'gte', value: ''}};
             rangeFilters[col].mode = e.target.value;
             render();
@@ -736,7 +861,7 @@ function buildControls() {{
     }});
 
     TEXT_FILTERS.forEach(col => {{
-        document.getElementById(`filter-${{col}}`).addEventListener('input', e => {{
+        document.getElementById('filter-' + col).addEventListener('input', e => {{
             textFilters[col] = e.target.value.toLowerCase();
             render();
         }});
@@ -838,7 +963,14 @@ function getFiltered() {{
 
 function render() {{
     let rows = getFiltered();
-    document.getElementById('count').textContent = `Showing ${{rows.length}} of ${{DATA.length}} adversaries`;
+    const countEl = document.getElementById('count');
+    countEl.textContent = '';
+    countEl.appendChild(document.createTextNode('Showing '));
+    const strong = document.createElement('strong');
+    strong.style.color = 'var(--accent)';
+    strong.textContent = rows.length;
+    countEl.appendChild(strong);
+    countEl.appendChild(document.createTextNode(' of ' + DATA.length + ' adversaries'));
 
     if (sortCol !== null) {{
         rows.sort((a, b) => {{
@@ -858,7 +990,7 @@ function render() {{
 
     const tbody = document.getElementById('tbody');
     if (rows.length === 0) {{
-        tbody.innerHTML = '<tr><td colspan="' + HEADERS.length + '" class="no-results">No matching adversaries found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="' + HEADERS.length + '" class="no-results">&#x2694; No matching adversaries found.</td></tr>';
         return;
     }}
 
