@@ -4,6 +4,11 @@ from typing import Optional
 import re
 
 
+# Matches a signed attack modifier: plain integers (+4, -1) or variable dice
+# modifiers used by some adversaries (+2d4, +d6, +2d4+1).
+_MODIFIER_RE = re.compile(r'^[+-](?:\d+|\d*d\d+(?:[+-]\d+)?)$')
+
+
 @dataclass
 class Attack:
     """Represents an adversary's attack information."""
@@ -25,8 +30,7 @@ class Attack:
         attack = cls()
 
         for part in parts:
-            # Check for modifier (starts with + or -)
-            if re.match(r'^[+-]\d+$', part):
+            if _MODIFIER_RE.match(part):
                 attack.modifier = part
             # Check for weapon: range pattern (colon separator)
             elif ":" in part:
@@ -34,7 +38,7 @@ class Attack:
                 attack.weapon_name = weapon_range[0].strip()
                 attack.range = weapon_range[1].strip() if len(weapon_range) > 1 else None
             # Check for weapon - range pattern (hyphen separator, e.g. "Staff - Far")
-            elif " - " in part and not re.search(r'\d+d\d+', part) and not re.match(r'^[+-]\d+$', part):
+            elif " - " in part and not re.search(r'\d+d\d+', part) and not _MODIFIER_RE.match(part):
                 weapon_range = part.split(" - ", 1)
                 attack.weapon_name = weapon_range[0].strip()
                 attack.range = weapon_range[1].strip() if len(weapon_range) > 1 else None
@@ -218,4 +222,10 @@ class Adversary:
         safe = re.sub(r'\s+', ' ', safe).strip()
         # Defense-in-depth: strip path separators
         safe = safe.replace('/', '').replace('\\', '')
+        safe = re.sub(
+            r"[A-Za-z]+(?:'[A-Za-z]+)?",
+            lambda match: match.group(0)[:1].upper() + match.group(0)[1:].lower(),
+            safe,
+        )
+        safe = safe[:120].rstrip()
         return safe

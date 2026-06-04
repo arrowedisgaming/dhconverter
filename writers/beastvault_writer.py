@@ -1,13 +1,15 @@
-"""BeastVault JSON writer for Daggerheart adversary data.
+"""Arrow's Adversary Bank JSON writer for Daggerheart adversary data.
 
-Produces a JSON array compatible with the BeastVault Obsidian plugin's
-library format. Each adversary becomes a dict with fields matching
-BeastVault conventions:
+Produces a JSON array compatible with Arrow's Adversary Bank and the older
+BeastVault Obsidian plugin library format. Each adversary becomes a dict with
+fields matching the plugin conventions:
 - Adversaries: name, tier, type, desc, difficulty, motives, hp, stress,
   attack, weapon, range, damage, thresholds, xp, source, features
 - Environments: name, tier, type, desc, difficulty, impulses, source, features
   (combat fields omitted)
 """
+from __future__ import annotations
+
 import json
 import re
 import sys
@@ -22,7 +24,7 @@ except ImportError:
     from models.adversary import Adversary, Feature
 
 
-# Maps source display names to BeastVault slug tags
+# Maps source display names to Arrow's Adversary Bank source tags
 SOURCE_TAG_MAP = {
     'Age of Umbra Adversaries': 'age-of-umbra',
     'Martial Adversaries': 'martial',
@@ -34,7 +36,7 @@ SOURCE_TAG_MAP = {
 
 
 class BeastvaultWriter:
-    """Writer for BeastVault-compatible JSON adversary format."""
+    """Writer for Arrow's Adversary Bank-compatible JSON adversary format."""
 
     @classmethod
     def write_adversaries(
@@ -43,7 +45,7 @@ class BeastvaultWriter:
         output_path: Path,
         source_tag: Optional[str] = None,
     ) -> int:
-        """Write adversaries as a BeastVault JSON array file.
+        """Write adversaries as an Arrow's Adversary Bank JSON array file.
 
         Returns the number of entries written.
         """
@@ -59,7 +61,7 @@ class BeastvaultWriter:
     def format_adversary(
         cls, adv: Adversary, source_tag: Optional[str] = None
     ) -> dict:
-        """Format a single adversary as a BeastVault-compatible dict.
+        """Format a single adversary as an Arrow's Adversary Bank-compatible dict.
 
         Only emits fields that have values (sparse format), except xp which
         is emitted as "" for adversaries without experience data.
@@ -94,7 +96,7 @@ class BeastvaultWriter:
                 entry["stress"] = adv.stress
 
             if adv.attack and not adv.attack.is_empty():
-                modifier = cls._parse_attack_modifier(adv.attack.modifier)
+                modifier = cls._format_attack_modifier(adv.attack.modifier)
                 if modifier is not None:
                     entry["attack"] = modifier
                 if adv.attack.weapon_name:
@@ -108,7 +110,8 @@ class BeastvaultWriter:
             if thresholds:
                 entry["thresholds"] = thresholds
 
-            # xp: emit "" for adversaries without experience (BV convention)
+            # xp: emit "" for adversaries without experience, matching the
+            # existing built-in library data shape.
             entry["xp"] = adv.experience if adv.experience else ""
 
         # Source tag
@@ -128,14 +131,14 @@ class BeastvaultWriter:
         return adv.hp is None and adv.stress is None
 
     @classmethod
-    def _parse_attack_modifier(cls, modifier: Optional[str]) -> Optional[int]:
-        """Convert modifier string like '+3' or '-1' to int."""
+    def _format_attack_modifier(cls, modifier: Optional[str]) -> Optional[int | str]:
+        """Convert plain numeric modifiers to int; preserve variable modifiers."""
         if modifier is None:
             return None
         try:
             return int(modifier)
         except (ValueError, TypeError):
-            return None
+            return modifier
 
     @classmethod
     def _format_thresholds(cls, adv: Adversary) -> str:
@@ -144,7 +147,7 @@ class BeastvaultWriter:
 
     @classmethod
     def _format_feature(cls, feature: Feature) -> dict:
-        """Format a single feature as a BeastVault dict."""
+        """Format a single feature as an Arrow's Adversary Bank dict."""
         entry: dict = {}
         if feature.name:
             entry["name"] = feature.name
@@ -156,7 +159,7 @@ class BeastvaultWriter:
 
     @classmethod
     def _resolve_source_tag(cls, adv: Adversary) -> str:
-        """Resolve source display name to a BeastVault slug tag."""
+        """Resolve source display name to an Arrow's Adversary Bank source tag."""
         if not adv.source_name:
             return "homebrew"
 

@@ -38,7 +38,7 @@ from utils.source_finder import SOURCE_CONFIGS
 # Safe wrapper for parse_source (raises instead of sys.exit)
 # ---------------------------------------------------------------------------
 
-def parse_source_safe(source_path: Path) -> list[Adversary]:
+def parse_source_safe(source_path: Path, source_name: str | None = None) -> list[Adversary]:
     """Parse adversaries from a source file. Raises on error instead of exit."""
     suffix = source_path.suffix.lower()
 
@@ -51,7 +51,7 @@ def parse_source_safe(source_path: Path) -> list[Adversary]:
                 "Install with: pip install pdfplumber"
             )
         parser = PDFParser()
-        return parser.parse_file(source_path)
+        return parser.parse_file(source_path, source_name=source_name)
 
     elif suffix == '.md':
         return MDParser.parse_file(source_path)
@@ -241,10 +241,10 @@ class ConverterHandler(BaseHTTPRequestHandler):
             # Determine source file
             tmp_path = None
             try:
-                source_path, tmp_path = self._resolve_source(fields)
+                source_path, tmp_path, source_name = self._resolve_source(fields)
 
                 # Parse adversaries
-                adversaries = parse_source_safe(source_path)
+                adversaries = parse_source_safe(source_path, source_name=source_name)
                 if not adversaries:
                     self._send_json({
                         "success": False,
@@ -263,13 +263,19 @@ class ConverterHandler(BaseHTTPRequestHandler):
 
                 overwrite = _is_truthy(fields.get("overwrite", "false"))
                 do_markdown = _is_truthy(fields.get("markdown", "true"))
+                # Legacy form field name; the UI label now says "Combined JSON library"
+                # but the key is preserved for API stability.
                 do_beastvault = _is_truthy(fields.get("beastvault", "false"))
                 do_index = _is_truthy(fields.get("index", "false"))
+
+                if not do_markdown and not do_beastvault:
+                    self._send_json({"success": False, "error": "Select at least one output format."}, status=400)
+                    return
 
                 files_written = []
                 beastvault_file = None
 
-                # Write markdown files
+                # Write Arrow's Adversary Bank-readable Markdown files
                 if do_markdown:
                     from convert import convert_to_files
                     written = convert_to_files(
@@ -278,7 +284,7 @@ class ConverterHandler(BaseHTTPRequestHandler):
                     )
                     files_written = [p.name for p in written.values()]
 
-                # BeastVault JSON
+                # Optional combined JSON library file
                 if do_beastvault:
                     from writers.beastvault_writer import BeastvaultWriter
                     json_dir = output_dir if do_markdown else PROJECT_ROOT
@@ -333,10 +339,10 @@ class ConverterHandler(BaseHTTPRequestHandler):
 
     # -- Helpers -----------------------------------------------------------
 
-    def _resolve_source(self, fields: dict) -> tuple[Path, str | None]:
+    def _resolve_source(self, fields: dict) -> tuple[Path, str | None, str | None]:
         """Determine source file path from request fields.
 
-        Returns (source_path, tmp_path_or_None).
+        Returns (source_path, tmp_path_or_None, source_name_or_None).
         If a file was uploaded, tmp_path is set and should be cleaned up.
         If an existing source was selected, tmp_path is None.
         """
@@ -353,7 +359,7 @@ class ConverterHandler(BaseHTTPRequestHandler):
             )
             tmp.write(file_field["data"])
             tmp.close()
-            return Path(tmp.name), tmp.name
+            return Path(tmp.name), tmp.name, Path(filename).stem
 
         # Check for existing source selection
         source_name = fields.get("source")
@@ -365,7 +371,7 @@ class ConverterHandler(BaseHTTPRequestHandler):
                 raise ValueError("Invalid source name.")
             if not source_path.exists():
                 raise FileNotFoundError(f"Source file not found: {source_name}")
-            return source_path, None
+            return source_path, None, None
 
         raise ValueError("No source file provided. Upload a file or select an existing source.")
 

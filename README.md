@@ -1,6 +1,6 @@
 # Daggerheart Adversary Converter
 
-A Python toolkit for converting [Daggerheart](https://www.daggerheart.com/) TTRPG stat blocks from PDF and multi-adversary Markdown sources into standardized, individual Markdown files.
+A local converter for turning [Daggerheart](https://www.daggerheart.com/) adversary stat blocks from PDF or Markdown sources into files that [Arrow's Adversary Bank](https://github.com/arrowedisgaming/arroweds-adversary-bank/) can read from an Obsidian library folder.
 
 ## What It Does
 
@@ -8,59 +8,85 @@ Daggerheart adversary stat blocks are typically published in dense PDFs or large
 
 - **Extracts** adversary stat blocks from PDFs (with smart two-column layout detection)
 - **Parses** multi-adversary Markdown files (both community and standardized formats)
-- **Converts** each adversary into its own clean, consistently-formatted Markdown file
+- **Converts** each adversary into its own Arrow's Adversary Bank-readable Markdown file
 - **Normalizes** existing adversary files to a standard format
 - **Attributes** sources by searching original PDFs/MDs for each adversary name and page number
-- **Exports** BeastVault-compatible JSON for use with the [BeastVault](https://github.com/ly0va/beastvault) community tool
+- **Exports** optional combined JSON for Arrow's Adversary Bank and older BeastVault-style workflows
 - **Generates** master index files across all converted adversaries
 
 ### Example Output
 
-Each adversary gets its own file in a readable, consistent format:
+Each adversary gets its own `.md` file with a `daggerheart` YAML code block. Arrow's Adversary Bank scans these from the library folders you choose in Obsidian.
 
-```markdown
+````markdown
 # JAGGED KNIFE LACKEY
 
-***Tier 1 Minion***
-*A thief with simple clothes and small daggers, eager to prove themselves.*
-**Motives & Tactics:** Escape, profit, throw smoke
-
-> **Difficulty:** 9 | **Thresholds:** None | **HP:** 1 | **Stress:** 1
-> **ATK:** -2 | **Daggers:** Melee | 2 phy
-> **Experience:** Thief +2
-
-## FEATURES
-
-***Minion (3) - Passive:*** The Lackey is defeated when they take
-any damage. For every 3 damage a PC deals to the Lackey, defeat
-an additional Minion within range the attack would succeed against.
-
-***Group Attack - Action:*** Spend a Fear to choose a target and
-spotlight all Jagged Knife Lackeys within Close range of them.
-Those Minions move into Melee range of the target and make one
-shared attack roll. On a success, they deal 2 physical damage
-each. Combine this damage.
-
----
-
-*Source: Daggerheart System Reference Document*
+```daggerheart
+name: "JAGGED KNIFE LACKEY"
+tier: 1
+type: "Minion"
+desc: "A thief with simple clothes and small daggers, eager to prove themselves."
+difficulty: 9
+attack: -2
+weapon: "Daggers"
+range: "Melee"
+damage: "2 phy"
+hp: 1
+stress: 1
+xp: "Thief +2"
+motives: "Escape, profit, throw smoke"
+features:
+  - name: "Minion (3)"
+    type: "Passive"
+    desc: "The Lackey is defeated when they take any damage."
 ```
+````
 
 ## Getting Started
 
-### Requirements
+### Easy install
 
-- **Python 3.10+**
-- **pdfplumber** (only required for PDF parsing)
-- **openpyxl** (only required for HTML reference table generation)
+1. Download this project as a ZIP from GitHub.
+2. Unzip it somewhere stable, like `Documents`, `Desktop`, or your RPG tools folder.
+3. Open the unzipped folder.
+4. Run the quickstart for your OS:
+   - Mac: double-click `Start Converter (Mac).command`
+   - Windows: double-click `Start Converter (Windows).bat`
+5. On first run, the quickstart creates `.venv` and installs `pdfplumber` and `openpyxl`.
+6. Your browser opens the converter at `http://127.0.0.1:8742`.
+7. Drag in a `.pdf` or `.md` file.
+8. Keep `Arrow's Adversary Bank Markdown` checked.
+9. Click `Convert`.
+10. Use the generated files in `output/web-convert`.
 
-### Installation
+### Use the output in Obsidian
+
+1. Install [Arrow's Adversary Bank](https://github.com/arrowedisgaming/arroweds-adversary-bank/) in Obsidian.
+2. Copy the generated `.md` files, or the whole generated folder, into your Obsidian vault.
+3. In Obsidian, open `Settings` > `Arrow's Adversary Bank`.
+4. Under `Homebrew library`, choose the folder that contains the generated files.
+5. Run `Refresh library` from Arrow's Adversary Bank.
+6. Use `Insert adversary from library` and search for the converted adversaries.
+
+The optional `adversaries.json` export also works as a combined library file, but the generated Markdown files are now the main path.
+
+### Manual setup
+
+If you prefer the terminal:
 
 ```bash
-pip install -r requirements.txt
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python app.py
 ```
 
-No other dependencies.
+On Windows, use:
+
+```bat
+py -3 -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe app.py
+```
 
 ### Convert a source file to individual adversary files
 
@@ -71,9 +97,10 @@ python convert.py source.pdf --list                     # List detected adversar
 python convert.py source.pdf --report                   # Show a validation report
 python convert.py source.pdf -o output/ --index         # Also generate a master index
 python convert.py source.pdf -o output/ --overwrite     # Overwrite existing files
-python convert.py source.pdf --beastvault               # Export BeastVault JSON only
-python convert.py source.pdf -o output/ --beastvault    # MD files + BeastVault JSON
-python convert.py source.pdf --beastvault custom.json   # Custom JSON filename
+python convert.py source.pdf --adversary-bank           # Export combined JSON only
+python convert.py source.pdf -o output/ --adversary-bank  # MD files + combined JSON
+python convert.py source.pdf --adversary-bank custom.json # Custom JSON filename
+python convert.py source.pdf -o output/ --readable-markdown # Older readable stat block files
 ```
 
 ### Normalize existing adversary files
@@ -96,12 +123,12 @@ No terminal required. Double-click the launcher for your OS:
 Or launch manually from a terminal:
 
 ```bash
-python3 app.py                  # Start server on port 8742, auto-opens browser
-python3 app.py --port 9000      # Custom port
-python3 app.py --no-browser     # Don't auto-open browser
+.venv/bin/python app.py                  # Start server on port 8742, auto-opens browser
+.venv/bin/python app.py --port 9000      # Custom port
+.venv/bin/python app.py --no-browser     # Don't auto-open browser
 ```
 
-The web UI runs a local server at `http://127.0.0.1:8742` using only the Python standard library (no extra dependencies beyond pdfplumber for PDF parsing). It provides the same conversion pipeline as the CLI tools through a browser interface.
+The web UI runs a local server at `http://127.0.0.1:8742`. It provides the same conversion pipeline as the CLI tools through a browser interface.
 
 You must supply your own source files in the `sources/` directory. The `output/` directory is created automatically during conversion.
 
@@ -142,8 +169,9 @@ dhadvconverter/
 │   ├── md_parser.py                    # Markdown format parsing
 │   └── text_cleaner.py                 # Unicode normalization, OCR artifact removal
 ├── writers/
+│   ├── adversary_bank_writer.py         # Writes Arrow's Adversary Bank Markdown
 │   ├── markdown_writer.py              # Writes standardized adversary format
-│   ├── beastvault_writer.py            # Writes BeastVault-compatible JSON export
+│   ├── beastvault_writer.py            # Writes combined JSON library export
 │   └── index_generator.py              # Generates master/type index files
 ├── output/                             # Converted adversary files (gitignored)
 ├── utils/

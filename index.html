@@ -557,8 +557,8 @@ body::before {
     <fieldset class="field" style="border:none;padding:0;margin:0 0 0.75rem">
       <legend style="font-size:0.8125rem;font-weight:500;margin-bottom:0.25rem;color:var(--text-dim)">Format</legend>
       <div class="checkgroup">
-        <label class="check-item"><input type="checkbox" id="opt-markdown" checked> Markdown files</label>
-        <label class="check-item"><input type="checkbox" id="opt-beastvault"> BeastVault JSON</label>
+        <label class="check-item"><input type="checkbox" id="opt-markdown" checked> <a href="https://community.obsidian.md/plugins/arroweds-adversary-bank" target="_blank" rel="noopener noreferrer">Arrowed's Adversary Bank Markdown</a></label>
+        <label class="check-item"><input type="checkbox" id="opt-beastvault"> Combined JSON library</label>
         <label class="check-item"><input type="checkbox" id="opt-index"> Master Index</label>
       </div>
     </fieldset>
@@ -786,7 +786,7 @@ function renderConvertResults(data) {
     }
 
     if (data.beastvault_file) {
-      html += `<details><summary>BeastVault JSON</summary><div class="detail-body"><ul><li>${esc(data.beastvault_file)}</li></ul></div></details>`;
+      html += `<details><summary>Combined JSON library</summary><div class="detail-body"><ul><li>${esc(data.beastvault_file)}</li></ul></div></details>`;
     }
 
     if (data.validation_warnings && data.validation_warnings.length > 0) {

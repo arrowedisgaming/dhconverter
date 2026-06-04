@@ -268,6 +268,11 @@ class MDParser:
             return features
 
         features_text = features_match.group(1)
+        features_text = re.split(
+            r'\n---\s*(?:\n|$)|\n\*Source:|\n\*This stat block is',
+            features_text,
+            maxsplit=1
+        )[0]
 
         # Split on ***Name - Type:*** pattern
         feature_blocks = re.split(r'(?=\*{3}[^*]+\s*-\s*[^*:]+:\*{3})', features_text)

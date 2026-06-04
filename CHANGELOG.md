@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+
+- **Breaking:** Default per-adversary Markdown output now emits a `daggerheart`-fenced YAML code block readable by [Arrow's Adversary Bank](https://github.com/arrowedisgaming/arroweds-adversary-bank/) in Obsidian. Pass `--readable-markdown` to restore the previous human-readable stat-block format.
+- Renamed the JSON export flag to `--adversary-bank`; `--beastvault` is kept as a deprecated alias and now prints a one-line warning on stderr.
+- Web UI labels updated: "Markdown files" → "Arrow's Adversary Bank Markdown"; "BeastVault JSON" → "Combined JSON library". The internal form field name `beastvault` is preserved for API stability.
+- Launcher scripts (`Start Converter (Mac).command`, `Start Converter (Windows).bat`) now bootstrap a local `.venv` and install dependencies on first run.
+
+### Added
+
+- `writers/adversary_bank_writer.py` — new Markdown writer that emits Arrow's Adversary Bank YAML code blocks. Uses a stdlib-only YAML emitter (JSON-encoded scalars) to keep the project zero-dependency.
+- `tests/test_adversary_bank_writer.py` — covers escape correctness, dict-list indentation, variable attack modifiers, and empty-field handling.
+
+### Fixed
+
+- `Attack.from_string` now recognizes variable attack modifiers like `+2d4` and `+2d4+1`; both the JSON and Markdown writers preserve them as strings instead of dropping them.
+- `MDParser._parse_features` no longer absorbs trailing source footer text (`---`, `*Source:`, `*This stat block is...`) into the last feature's description.
+
 ## [0.3] - 2026-04-04
 
 ### Changed

@@ -46,13 +46,13 @@ class PDFParser:
                 "Install with: pip install pdfplumber"
             )
 
-    def parse_file(self, file_path: Path) -> list[Adversary]:
+    def parse_file(self, file_path: Path, source_name: Optional[str] = None) -> list[Adversary]:
         """Parse a PDF file and extract all adversaries."""
         # Extract text with page information
         page_texts = self._extract_text_with_pages(file_path)
 
         # Derive source name from filename
-        source_name = self._filename_to_source_name(file_path.name)
+        source_name = source_name or self._filename_to_source_name(file_path.name)
 
         return self._parse_adversaries_from_pages(page_texts, source_name)
 
@@ -216,7 +216,7 @@ class PDFParser:
 
             for block in blocks:
                 adv = self._parse_adversary_block(block)
-                if adv and adv.name:
+                if adv and self._is_valid_pdf_adversary(adv):
                     adv.source_name = source_name
                     adv.source_page = page_num
                     adversaries.append(adv)
@@ -232,7 +232,7 @@ class PDFParser:
 
         for block in blocks:
             adv = self._parse_adversary_block(block)
-            if adv and adv.name:
+            if adv and self._is_valid_pdf_adversary(adv):
                 adversaries.append(adv)
 
         return adversaries
@@ -290,7 +290,7 @@ class PDFParser:
                     start_indices.add(i)
 
         if not start_indices:
-            return [text] if text.strip() else []
+            return []
 
         # Sort and split
         sorted_starts = sorted(start_indices)
@@ -302,6 +302,19 @@ class PDFParser:
                 blocks.append(block)
 
         return blocks
+
+    def _is_valid_pdf_adversary(self, adv: Adversary) -> bool:
+        """Return True when a parsed PDF block has the minimum stat-block shape."""
+        if not adv.name or len(adv.name) > 120:
+            return False
+        return all([
+            adv.tier is not None,
+            adv.adversary_type,
+            adv.difficulty is not None,
+            adv.hp is not None,
+            adv.stress is not None,
+            bool(adv.features),
+        ])
 
     def _is_adversary_start(self, line: str, current_block: list) -> bool:
         """Determine if a line starts a new adversary block."""
@@ -354,13 +367,7 @@ class PDFParser:
         # Parse description (italic-like text or flavor text)
         self._parse_pdf_description(adv, block)
 
-        # Parse Motives & Tactics
-        motives_match = re.search(
-            r'Motives\s*(?:&|and)\s*Tactics[:\s]+(.+?)(?:Difficulty|$)',
-            block, re.IGNORECASE | re.DOTALL
-        )
-        if motives_match:
-            adv.motives_tactics = motives_match.group(1).strip()
+        self._parse_pdf_motives(adv, block)
 
         # Parse features
         adv.features = self._parse_pdf_features(block)
@@ -386,15 +393,8 @@ class PDFParser:
                 adv.threshold_major = int(match.group(2))
                 break
 
-        # HP
-        hp_match = re.search(r'HP[:\s]+(\d+)', text, re.IGNORECASE)
-        if hp_match:
-            adv.hp = int(hp_match.group(1))
-
-        # Stress
-        stress_match = re.search(r'Stress[:\s]+(\d+)', text, re.IGNORECASE)
-        if stress_match:
-            adv.stress = int(stress_match.group(1))
+        adv.hp = self._parse_stat_value(text, "HP")
+        adv.stress = self._parse_stat_value(text, "Stress")
 
         # Attack info
         atk_match = re.search(
@@ -408,6 +408,8 @@ class PDFParser:
                 range=atk_match.group(2).strip().split(':')[-1].strip() if ':' in atk_match.group(2) else None,
                 damage=TextCleaner.normalize_damage_type(atk_match.group(3).strip())
             )
+        else:
+            self._parse_age_style_attack(adv, text)
 
         # Experience
         exp_match = re.search(
@@ -416,6 +418,84 @@ class PDFParser:
         )
         if exp_match:
             adv.experience = exp_match.group(1).strip()
+
+    def _parse_age_style_attack(self, adv: Adversary, text: str) -> None:
+        """Parse lines like `Long Knife: Melee - 2d6+6 phy` plus a separate ATK line."""
+        range_pattern = r'(?:Melee|Very Close|Close|Far|Very Far)'
+        weapon_match = re.search(
+            rf'^([^:\n]+):\s*({range_pattern})\s*-\s*(.+?)(?:\s+Thresholds?:|\n|$)',
+            text,
+            re.IGNORECASE | re.MULTILINE,
+        )
+        if not weapon_match:
+            return
+
+        modifier = None
+        modifier_match = re.search(r'ATK:\s*([+-]?\d+(?:d\d+(?:[+-]\d+)?)?)', text, re.IGNORECASE)
+        if modifier_match:
+            modifier = modifier_match.group(1).strip()
+
+        damage = weapon_match.group(3).strip()
+        if damage.lower().startswith("threshold"):
+            damage = ""
+
+        adv.attack = Attack(
+            modifier=modifier,
+            weapon_name=weapon_match.group(1).strip(),
+            range=weapon_match.group(2).strip(),
+            damage=TextCleaner.normalize_damage_type(damage) if damage else None,
+        )
+
+    def _parse_pdf_motives(self, adv: Adversary, text: str) -> None:
+        """Parse motives without swallowing following stat or attack lines."""
+        range_pattern = r'(?:Melee|Very Close|Close|Far|Very Far)'
+        motives_match = re.search(
+            rf'Motives\s*(?:&|and)\s*Tactics[:\s]+(.+?)(?=\n(?:'
+            rf'Thresholds?:|[^\n:]+:\s*{range_pattern}\s*-|ATK:|Difficulty:|Experience:|FEATURES'
+            rf')|$)',
+            text,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if motives_match:
+            adv.motives_tactics = re.sub(r'\s*\n\s*', ' ', motives_match.group(1)).strip()
+
+    def _parse_stat_value(self, text: str, label: str) -> Optional[int]:
+        """Parse numeric stats or count circle pips like `HP: O O O`."""
+        numeric_match = re.search(rf'{label}[:\s]+(\d+)', text, re.IGNORECASE)
+        if numeric_match:
+            return int(numeric_match.group(1))
+
+        if label.lower() == "stress":
+            after_label_match = re.search(
+                r'Stress:\s*((?:[O0]\s*)+)',
+                text,
+                re.IGNORECASE,
+            )
+            if after_label_match:
+                return self._count_stat_pips(after_label_match.group(1))
+
+            before_label_match = re.search(
+                r'Difficulty:\s*\d+\s+((?:[O0](?:\s+|$))+)\s*\nStress:',
+                text,
+                re.IGNORECASE | re.MULTILINE,
+            )
+            if before_label_match:
+                return self._count_stat_pips(before_label_match.group(1))
+        else:
+            pip_match = re.search(
+                rf'{label}:\s*((?:[O0]\s*)+)',
+                text,
+                re.IGNORECASE,
+            )
+            if pip_match:
+                return self._count_stat_pips(pip_match.group(1))
+
+        return None
+
+    @staticmethod
+    def _count_stat_pips(text: str) -> int:
+        """Count HP/Stress circles extracted from PDFs as O or 0 glyphs."""
+        return len(re.findall(r'[O0]', text, re.IGNORECASE))
 
     def _parse_pdf_description(self, adv: Adversary, text: str) -> None:
         """Extract description/flavor text from PDF block."""
@@ -448,8 +528,15 @@ class PDFParser:
                 continue
 
             # Stop at Motives or stats
-            if 'Motives' in stripped or 'Difficulty' in stripped:
+            if re.search(r'^(Motives|Difficulty|Thresholds?|ATK|FEATURES)\b', stripped, re.IGNORECASE):
                 break
+            if re.match(r'^[^:\n]+:\s*(?:Melee|Very Close|Close|Far|Very Far)\s*-', stripped, re.IGNORECASE):
+                break
+
+            if re.match(r'^Description:', stripped, re.IGNORECASE):
+                desc_lines.append(re.sub(r'^Description:\s*', '', stripped, flags=re.IGNORECASE))
+                in_description = True
+                continue
 
             if in_description and stripped:
                 desc_lines.append(stripped)

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Convert Daggerheart adversaries from PDF or MD to standardized individual files.
+"""Convert Daggerheart adversaries from PDF or MD to individual files.
 
 Usage:
-    python convert.py source.pdf -o output/           # Convert PDF to individual MD files
-    python convert.py source.md -o output/            # Convert multi-adversary MD to individual files
+    python convert.py source.pdf -o output/           # Convert PDF to Arrow's Adversary Bank MD files
+    python convert.py source.md -o output/            # Convert multi-adversary MD to Arrow's Adversary Bank files
     python convert.py source.pdf -o output/ --index   # Also generate master index
     python convert.py source.md --list                # List adversaries without converting
-    python convert.py source.pdf --beastvault         # Export BeastVault JSON only
+    python convert.py source.pdf --adversary-bank     # Export combined JSON only
 """
 import argparse
 import sys
@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from models.adversary import Adversary
 from parsers.md_parser import MDParser
-from parsers.text_cleaner import TextCleaner
+from writers.adversary_bank_writer import AdversaryBankWriter
 from writers.markdown_writer import MarkdownWriter
 from writers.index_generator import IndexGenerator
 
@@ -64,9 +64,10 @@ def convert_to_files(
     adversaries: list[Adversary],
     output_dir: Path,
     overwrite: bool = False,
-    verbose: bool = True
+    verbose: bool = True,
+    readable_markdown: bool = False,
 ) -> dict[str, Path]:
-    """Convert adversaries to individual markdown files."""
+    """Convert adversaries to individual Markdown files."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if verbose:
@@ -74,20 +75,28 @@ def convert_to_files(
         print()
 
     written = {}
+    used_filenames = set()
     for adv in adversaries:
-        filename = f"{adv.safe_filename()}.md"
-        output_path = output_dir / filename
+        base_name = adv.safe_filename()
+        output_path = output_dir / f"{base_name}.md"
 
-        if output_path.exists() and not overwrite:
-            # Add suffix to avoid overwriting
+        i = 1
+        while output_path.name in used_filenames or (output_path.exists() and not overwrite):
+            output_path = output_dir / f"{base_name} ({i}).md"
+            i += 1
+
+        used_filenames.add(output_path.name)
+
+        key = adv.name
+        if key in written:
             i = 1
-            base_name = adv.safe_filename()
-            while output_path.exists():
-                output_path = output_dir / f"{base_name} ({i}).md"
+            while f"{adv.name} ({i})" in written:
                 i += 1
+            key = f"{adv.name} ({i})"
 
-        MarkdownWriter.write_adversary(adv, output_path)
-        written[adv.name] = output_path
+        writer = MarkdownWriter if readable_markdown else AdversaryBankWriter
+        writer.write_adversary(adv, output_path)
+        written[key] = output_path
 
         if verbose:
             issues = adv.validate()
@@ -99,7 +108,7 @@ def convert_to_files(
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Convert Daggerheart adversaries from PDF or MD to standardized files'
+        description="Convert Daggerheart adversaries from PDF or MD to Arrow's Adversary Bank files"
     )
     parser.add_argument(
         'source',
@@ -137,11 +146,26 @@ def main():
         help='Suppress file-by-file output'
     )
     parser.add_argument(
+        '--readable-markdown',
+        action='store_true',
+        help=(
+            "Write the older human-readable stat block Markdown instead of "
+            "Arrow's Adversary Bank code blocks (the default since the rebrand)"
+        ),
+    )
+    parser.add_argument(
+        '--adversary-bank',
+        nargs='?',
+        const='adversaries.json',
+        metavar='FILENAME',
+        help="Export Arrow's Adversary Bank JSON (default: adversaries.json in output dir)"
+    )
+    parser.add_argument(
         '--beastvault',
         nargs='?',
         const='adversaries.json',
         metavar='FILENAME',
-        help='Export BeastVault JSON (default: adversaries.json in output dir)'
+        help="Deprecated alias for --adversary-bank"
     )
 
     args = parser.parse_args()
@@ -173,8 +197,15 @@ def main():
         print(report)
         return
 
-    # Convert mode - requires output directory (unless --beastvault only)
-    if not args.output and not args.beastvault:
+    # Convert mode - requires output directory unless only a combined JSON file is requested.
+    if args.beastvault and not args.adversary_bank:
+        print(
+            "warning: --beastvault is deprecated; use --adversary-bank instead.",
+            file=sys.stderr,
+        )
+    json_export = args.adversary_bank or args.beastvault
+
+    if not args.output and not json_export:
         print("Error: Output directory required (-o/--output)", file=sys.stderr)
         print("Use --list to see adversaries without converting", file=sys.stderr)
         sys.exit(1)
@@ -186,7 +217,8 @@ def main():
             adversaries,
             args.output,
             overwrite=args.overwrite,
-            verbose=not args.quiet
+            verbose=not args.quiet,
+            readable_markdown=args.readable_markdown,
         )
 
     # Generate index if requested
@@ -196,16 +228,16 @@ def main():
         print()
         print(f"Generated index: {index_path}")
 
-    # BeastVault JSON export
-    if args.beastvault:
+    # Arrow's Adversary Bank JSON export
+    if json_export:
         from writers.beastvault_writer import BeastvaultWriter
 
         json_dir = args.output if args.output else Path(".")
-        json_path = json_dir / args.beastvault
+        json_path = json_dir / json_export
         count = BeastvaultWriter.write_adversaries(adversaries, json_path)
         if not args.quiet:
             print()
-            print(f"BeastVault JSON: {count} entries written to {json_path}")
+            print(f"Arrow's Adversary Bank JSON: {count} entries written to {json_path}")
 
     # Summary
     if written:
