@@ -39,6 +39,9 @@ class PDFParser:
         'Traversal', 'Event', 'Exploration',
     ]
 
+    # Environment-style types have no HP/Stress (see BeastvaultWriter._is_environment)
+    ENVIRONMENT_TYPES = {'traversal', 'event', 'exploration'}
+
     def __init__(self):
         if pdfplumber is None:
             raise ImportError(
@@ -304,17 +307,34 @@ class PDFParser:
         return blocks
 
     def _is_valid_pdf_adversary(self, adv: Adversary) -> bool:
-        """Return True when a parsed PDF block has the minimum stat-block shape."""
+        """Return True when a parsed PDF block has the minimum stat-block shape.
+
+        Environment-style records (Traversal, Event, Exploration) have no
+        HP/Stress by design, so those fields are only required for combat
+        adversaries.
+        """
         if not adv.name or len(adv.name) > 120:
             return False
-        return all([
+        has_core_fields = all([
             adv.tier is not None,
             adv.adversary_type,
             adv.difficulty is not None,
-            adv.hp is not None,
-            adv.stress is not None,
             bool(adv.features),
         ])
+        if not has_core_fields:
+            return False
+        if self._is_environment_type(adv.adversary_type):
+            return True
+        return adv.hp is not None and adv.stress is not None
+
+    @classmethod
+    def _is_environment_type(cls, adversary_type: Optional[str]) -> bool:
+        """Check whether a parsed type keyword is an environment-style type."""
+        if not adversary_type:
+            return False
+        # Strip parentheticals like "Horde (8/HP)" before comparing
+        base_type = adversary_type.split('(')[0].strip().lower()
+        return base_type in cls.ENVIRONMENT_TYPES
 
     def _is_adversary_start(self, line: str, current_block: list) -> bool:
         """Determine if a line starts a new adversary block."""

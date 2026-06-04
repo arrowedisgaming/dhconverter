@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `Attack.from_string` now recognizes variable attack modifiers like `+2d4` and `+2d4+1`; both the JSON and Markdown writers preserve them as strings instead of dropping them.
 - `MDParser._parse_features` no longer absorbs trailing source footer text (`---`, `*Source:`, `*This stat block is...`) into the last feature's description.
+- PDF validation no longer silently drops environment-style records (`Traversal`, `Event`, `Exploration`): HP/Stress are now required only for combat adversaries, since environments have neither by design.
 
 ## [0.3] - 2026-04-04
 

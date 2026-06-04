@@ -83,6 +83,74 @@ class PDFParserBlockFilteringTests(unittest.TestCase):
         self.assertTrue(all(adv.source_page == 5 for adv in adversaries))
         self.assertTrue(all(adv.features for adv in adversaries))
 
+    def test_environment_block_without_hp_or_stress_is_kept(self):
+        parser = parser_without_pdfplumber()
+        text = (
+            "RAGING RIVER\n"
+            "Tier 2 Traversal\n"
+            "A swift waterway that threatens to sweep travelers downstream.\n"
+            "Impulses: Pull under, carry away, batter against rocks\n"
+            "Difficulty: 14\n"
+            "Potential Adversaries: River Serpent, Drowned Dead\n"
+            "FEATURES\n"
+            "Undertow - Passive: Crossing the river requires an Agility roll.\n"
+        )
+
+        adversaries = parser._parse_adversaries_from_pages([(12, text)], "Adversaries: Environments v1.5")
+
+        self.assertEqual(len(adversaries), 1)
+        env = adversaries[0]
+        self.assertEqual(env.name, "RAGING RIVER")
+        self.assertEqual(env.adversary_type, "Traversal")
+        self.assertIsNone(env.hp)
+        self.assertIsNone(env.stress)
+        self.assertTrue(env.features)
+
+    def test_event_environment_block_is_kept(self):
+        parser = parser_without_pdfplumber()
+        text = (
+            "AVALANCHE\n"
+            "Tier 3 Event\n"
+            "A wall of snow and ice crashes down the mountainside.\n"
+            "Impulses: Bury, deafen, isolate\n"
+            "Difficulty: 16\n"
+            "FEATURES\n"
+            "Buried Alive - Action: A character caught in the slide is restrained.\n"
+        )
+
+        adversaries = parser._parse_adversaries_from_pages([(3, text)], "Test Source")
+
+        self.assertEqual(len(adversaries), 1)
+        self.assertEqual(adversaries[0].adversary_type, "Event")
+
+    def test_environment_block_without_features_is_still_dropped(self):
+        parser = parser_without_pdfplumber()
+        text = (
+            "EMPTY EXPLORATION\n"
+            "Tier 1 Exploration\n"
+            "Heading-like text with no features section.\n"
+            "Difficulty: 10\n"
+        )
+
+        adversaries = parser._parse_adversaries_from_pages([(4, text)], "Test Source")
+
+        self.assertEqual(adversaries, [])
+
+    def test_combat_adversary_without_hp_is_still_dropped(self):
+        parser = parser_without_pdfplumber()
+        text = (
+            "HOLLOW KNIGHT\n"
+            "Tier 2 Bruiser\n"
+            "Motives & Tactics: Advance, smash\n"
+            "Difficulty: 13\n"
+            "FEATURES\n"
+            "Relentless - Passive: Acts twice per round.\n"
+        )
+
+        adversaries = parser._parse_adversaries_from_pages([(8, text)], "Test Source")
+
+        self.assertEqual(adversaries, [])
+
     def test_incomplete_tier_block_is_dropped(self):
         parser = parser_without_pdfplumber()
         text = (
