@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4] - 2026-07-22
+
 ### Added
 
 - Support for the *Hope and Fear* expansion, which the parser previously extracted **zero** records from. All 163 stat blocks (135 adversaries, 28 environments) now convert with no validation warnings.
@@ -48,6 +50,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `--report` now includes environments; their validation issues were previously omitted from the report.
 - `Attack.from_string` now recognizes variable attack modifiers like `+2d4` and `+2d4+1`; both the JSON and Markdown writers preserve them as strings instead of dropping them.
 - `MDParser._parse_features` no longer absorbs trailing source footer text (`---`, `*Source:`, `*This stat block is...`) into the last feature's description.
+- **`normalize.py` no longer destroys Arrow's Adversary Bank files.** `MDParser` reads only the heading from a `daggerheart` block, so normalizing one rewrote it as an empty stat block and discarded everything else. Because that format is now the default output, running `normalize.py` over a converted library — the workflow the README describes — silently destroyed it. Such files are detected and skipped.
+- `normalize.py` no longer rewrites files that are not stat blocks at all. The generated index was destroyed because `SKIP_FILES` named `Adversaries_Master_Index.md` while `IndexGenerator` writes `Adversaries_Index.md`, and campaign notes containing a `## FEATURES` heading lost their surrounding prose. Normalizing now requires two independent core stats before touching a file, rather than relying on a filename list.
+- Variable attack modifiers survive the PDF path. `ATK: +2d4 | …` parsed the modifier with a plain `\d+` and silently truncated it to `+2`, contradicting the support added for `Attack.from_string`. Both paths now share one grammar, and unsigned modifiers (`ATK: 2 | …`) are still accepted.
+- A section header sitting between two stat blocks is no longer swept into the preceding block, where it was appended to that block's last feature description.
+- The web UI accepts a quoted multipart boundary (`boundary="…"`, permitted by RFC 2045). The quotes were left in place, so the delimiter never matched and the upload was silently corrupted. A body whose delimiter is absent is now rejected rather than parsed into garbage.
+- YAML scalars escape DEL and the C1 control block (`\x7f`–`\x9f`). `json.dumps` passes those through literally and YAML forbids them, so a single stray character made a whole stat block unparseable.
+- Empty lists and dicts emit `[]` and `{}` instead of a bare key, which parsed back as `null`.
+- An adversary and an environment sharing a name no longer collapse to one entry in the returned write map, which under-reported the converted file count.
 
 ## [0.3] - 2026-04-04
 
