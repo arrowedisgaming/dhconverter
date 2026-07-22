@@ -91,7 +91,18 @@ def parse_multipart(body: bytes, content_type: str) -> dict:
     if not boundary:
         raise ValueError("No boundary found in Content-Type")
 
+    # RFC 2045 permits a quoted boundary. Leaving the quotes on produces a
+    # delimiter that never matches, so the body is returned as one undivided
+    # blob and the upload is silently corrupted.
+    if len(boundary) >= 2 and boundary[0] == '"' and boundary[-1] == '"':
+        boundary = boundary[1:-1]
+    if not boundary:
+        raise ValueError("Empty boundary in Content-Type")
+
     delimiter = f"--{boundary}".encode()
+    if delimiter not in body:
+        raise ValueError("Boundary delimiter not found in request body")
+
     parts = body.split(delimiter)
     fields = {}
 

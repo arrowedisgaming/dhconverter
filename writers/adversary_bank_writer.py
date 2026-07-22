@@ -24,6 +24,10 @@ except ImportError:
 # point at adversaries, environments, or both.
 ENVIRONMENT_SUBFOLDER = "environments"
 
+# DEL and the C1 control block. YAML rejects these outright, and json.dumps
+# leaves them literal when ensure_ascii is off.
+_YAML_FORBIDDEN_RE = re.compile(r"[\x7f-\x9f]")
+
 
 class AdversaryBankWriter:
     """Writer for Arrow's Adversary Bank-readable Markdown files."""
@@ -52,7 +56,10 @@ class AdversaryBankWriter:
         )
 
         if environments:
-            written.update(cls._write_records(
+            # Merged rather than updated: an adversary and an environment can
+            # share a name, and a plain update would drop one of the two paths
+            # even though both files were written.
+            cls._merge_written(written, cls._write_records(
                 environments,
                 output_dir / ENVIRONMENT_SUBFOLDER,
                 overwrite,
@@ -60,6 +67,17 @@ class AdversaryBankWriter:
             ))
 
         return written
+
+    @staticmethod
+    def _merge_written(target: dict[str, Path], extra: dict[str, Path]) -> None:
+        """Merge write results, renaming keys that collide across record kinds."""
+        for key, path in extra.items():
+            unique = key
+            i = 1
+            while unique in target:
+                unique = f"{key} ({i})"
+                i += 1
+            target[unique] = path
 
     @classmethod
     def write_environments(
@@ -231,6 +249,10 @@ class AdversaryBankWriter:
 
         for key, value in data.items():
             if isinstance(value, list):
+                # A bare "key:" parses back as null, not as an empty list.
+                if not value:
+                    lines.append(f"{pad}{key}: []")
+                    continue
                 lines.append(f"{pad}{key}:")
                 for item in value:
                     if isinstance(item, dict):
@@ -238,6 +260,9 @@ class AdversaryBankWriter:
                     else:
                         lines.append(f"{pad}  - {cls._yaml_scalar(item)}")
             elif isinstance(value, dict):
+                if not value:
+                    lines.append(f"{pad}{key}: {{}}")
+                    continue
                 lines.append(f"{pad}{key}:")
                 lines.extend(cls._yaml_lines(value, indent + 2))
             else:
@@ -255,6 +280,9 @@ class AdversaryBankWriter:
             prefix = "- " if first else "  "
             first = False
             if isinstance(value, list):
+                if not value:
+                    lines.append(f"{pad}{prefix}{key}: []")
+                    continue
                 lines.append(f"{pad}{prefix}{key}:")
                 for item in value:
                     lines.append(f"{pad}    - {cls._yaml_scalar(item)}")
@@ -272,7 +300,14 @@ class AdversaryBankWriter:
             return "true" if value else "false"
         if isinstance(value, (int, float)):
             return str(value)
-        return json.dumps(str(value), ensure_ascii=False)
+        encoded = json.dumps(str(value), ensure_ascii=False)
+        # json.dumps escapes C0 controls but passes DEL and the C1 block
+        # through literally. YAML forbids those, so a stray one makes the
+        # whole block unparseable. \u escapes are valid in a YAML
+        # double-quoted scalar, and non-ASCII text stays readable.
+        return _YAML_FORBIDDEN_RE.sub(
+            lambda match: "\\u%04x" % ord(match.group(0)), encoded
+        )
 
     @classmethod
     def _display_name(cls, name: str | None) -> str:

@@ -100,7 +100,10 @@ def convert_to_files(
             print()
             print(f"Writing {len(result.environments)} environments to {env_dir}")
             print()
-        written.update(_write_records(
+        # Merged rather than updated: an adversary and an environment can share
+        # a name, and a plain update would drop one path even though both files
+        # were written, under-reporting the file count.
+        AdversaryBankWriter._merge_written(written, _write_records(
             result.environments, env_dir, overwrite, verbose, writer.write_environment
         ))
 

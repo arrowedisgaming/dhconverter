@@ -241,6 +241,13 @@ class PDFParser:
         for j, start in enumerate(starts):
             end = starts[j + 1] if j + 1 < len(starts) else len(lines)
 
+            # A section header between two blocks belongs to neither. Without
+            # this the header is swept into the preceding block and ends up
+            # appended to its last feature's description.
+            for index in sections:
+                if start < index < end:
+                    end = index
+
             block_section, block_tier = section, section_tier
             for index, (name, tier) in sections.items():
                 if index < start:
@@ -463,18 +470,29 @@ class PDFParser:
         adv.hp = self._parse_stat_value(text, "HP")
         adv.stress = self._parse_stat_value(text, "Stress")
 
-        # Attack info
+        # Attack info. The pipe-separated form is handed to Attack.from_string
+        # so both paths share one modifier grammar — parsing the modifier here
+        # with a plain `\d+` truncated variable modifiers, turning "+2d4" into
+        # "+2" with nothing to indicate the loss.
         atk_match = re.search(
-            r'(?:ATK|Attack)[:\s]+([+-]?\d+)[^|]*\|([^|]+)\|([^|\n]+)',
-            text, re.IGNORECASE
+            r'(?:ATK|Attack)\s*:?\s*([^\n]+)', text, re.IGNORECASE
         )
-        if atk_match:
-            adv.attack = Attack(
-                modifier=atk_match.group(1).strip(),
-                weapon_name=atk_match.group(2).strip().split(':')[0].strip(),
-                range=atk_match.group(2).strip().split(':')[-1].strip() if ':' in atk_match.group(2) else None,
-                damage=TextCleaner.normalize_damage_type(atk_match.group(3).strip())
-            )
+        if atk_match and '|' in atk_match.group(1):
+            payload = atk_match.group(1).strip()
+            attack = Attack.from_string(payload)
+            # Attack.from_string requires a sign on the modifier. Some books
+            # print it unsigned ("ATK: 2 | Bite: Melee | 1d6 phy"), which the
+            # previous regex accepted, so recover that case here rather than
+            # loosening the shared grammar and changing Markdown parsing too.
+            if attack.modifier is None:
+                leading = payload.split('|', 1)[0].strip()
+                if re.fullmatch(r'\d+', leading):
+                    attack.modifier = leading
+                    if attack.weapon_name == leading:
+                        attack.weapon_name = None
+            if attack.damage:
+                attack.damage = TextCleaner.normalize_damage_type(attack.damage)
+            adv.attack = attack
         else:
             self._parse_age_style_attack(adv, text)
 

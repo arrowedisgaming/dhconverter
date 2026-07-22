@@ -9,6 +9,7 @@ Usage:
     python normalize.py . --add-sources      # Add source attribution from sources/ folder
 """
 import argparse
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -22,10 +23,20 @@ from writers.markdown_writer import MarkdownWriter
 from utils.source_finder import SourceFinder
 
 
+# Arrow's Adversary Bank files carry their stat block inside a `daggerheart`
+# fenced block, which this tool cannot read. Detect them so they are skipped
+# rather than rewritten into an empty stat block.
+ADVERSARY_BANK_FENCE_RE = re.compile(r'^```daggerheart\s*$', re.MULTILINE)
+
+
 # Files to skip during normalization
 SKIP_FILES = {
     '_SAMPLE.md',
     'Adversaries_Master_Index.md',
+    # The name IndexGenerator actually writes. The entry above never matched
+    # it, so a generated index was normalized into an empty stat block.
+    'Adversaries_Index.md',
+    'Adversaries_By_Type.md',
     'README.md',
     'CLAUDE.md',
 }
@@ -76,11 +87,25 @@ def normalize_file(
         'error': None,
         'name': None,
         'source_added': False,
+        'skipped': False,
+        'skip_reason': None,
     }
 
     try:
         # Read original content
         original_content = file_path.read_text(encoding='utf-8')
+
+        # Refuse to touch Arrow's Adversary Bank files. MDParser reads only the
+        # heading from a `daggerheart` YAML block, so normalizing one would
+        # rewrite it as an empty stat block and destroy the content. That
+        # format is the converter's default output, so this is the likely
+        # thing to point normalize.py at by mistake.
+        if ADVERSARY_BANK_FENCE_RE.search(original_content):
+            result['success'] = True
+            result['skipped'] = True
+            result['skip_reason'] = "Arrow's Adversary Bank format"
+            result['name'] = file_path.stem
+            return result
 
         # Parse adversary
         adversaries = MDParser.parse_adversaries(file_path)
@@ -90,6 +115,32 @@ def normalize_file(
             return result
 
         adv = adversaries[0]
+
+        # Safety net for anything that isn't a stat block — an index, campaign
+        # notes, a README copy. Rewriting one replaces its prose with an empty
+        # stat block, so require real evidence of a stat block before touching
+        # the file, rather than a filename blocklist that will always lag.
+        #
+        # Features deliberately do not count: any markdown with a "## FEATURES"
+        # heading would otherwise qualify, and notes files legitimately have
+        # one. Two independent core stats is the threshold — a genuine block
+        # always carries several, and no amount of prose produces two by
+        # accident.
+        core_stats = [
+            adv.tier is not None,
+            adv.difficulty is not None,
+            adv.hp is not None,
+            adv.stress is not None,
+            bool(adv.thresholds_str),
+            bool(adv.attack and not adv.attack.is_empty()),
+        ]
+        if sum(core_stats) < 2:
+            result['success'] = True
+            result['skipped'] = True
+            result['skip_reason'] = "no stat block found"
+            result['name'] = adv.name or file_path.stem
+            return result
+
         result['name'] = adv.name
         result['issues'] = adv.validate()
 
@@ -157,6 +208,7 @@ def normalize_directory(
         'with_issues': 0,
         'failed': 0,
         'sources_added': 0,
+        'skipped': 0,
         'details': [],
     }
 
@@ -169,7 +221,9 @@ def normalize_directory(
         )
         result['file'] = file_path.name
 
-        if result['success']:
+        if result.get('skipped'):
+            summary['skipped'] += 1
+        elif result['success']:
             summary['success'] += 1
             if result['changed']:
                 summary['changed'] += 1
@@ -183,11 +237,15 @@ def normalize_directory(
         summary['details'].append(result)
 
         if verbose:
-            status = "✓" if result['success'] else "✗"
-            changed_mark = " (changed)" if result['changed'] else ""
-            source_mark = " [+source]" if result.get('source_added') else ""
-            issues_mark = f" [{len(result['issues'])} issues]" if result['issues'] else ""
-            print(f"  {status} {file_path.name}{changed_mark}{source_mark}{issues_mark}")
+            if result.get('skipped'):
+                reason = result.get('skip_reason') or 'not a stat block'
+                print(f"  - {file_path.name} (skipped: {reason})")
+            else:
+                status = "✓" if result['success'] else "✗"
+                changed_mark = " (changed)" if result['changed'] else ""
+                source_mark = " [+source]" if result.get('source_added') else ""
+                issues_mark = f" [{len(result['issues'])} issues]" if result['issues'] else ""
+                print(f"  {status} {file_path.name}{changed_mark}{source_mark}{issues_mark}")
 
     return summary
 
@@ -269,6 +327,8 @@ def main():
     print("Summary:")
     print(f"  Total files: {summary['total']}")
     print(f"  Successful: {summary['success']}")
+    if summary.get('skipped'):
+        print(f"  Skipped (not normalizable): {summary['skipped']}")
     print(f"  Changed: {summary['changed']}")
     if args.add_sources:
         print(f"  Sources added: {summary['sources_added']}")
