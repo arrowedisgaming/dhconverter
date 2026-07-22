@@ -234,18 +234,26 @@ class MarkdownWriter:
         return written
 
     @classmethod
-    def format_validation_report(cls, adversaries: list[Adversary]) -> str:
-        """Generate a validation report for a list of adversaries."""
+    def format_validation_report(
+        cls,
+        adversaries: list[Adversary],
+        environments: Optional[list[Environment]] = None,
+    ) -> str:
+        """Generate a validation report for parsed records.
+
+        Environments are reported alongside adversaries so that issues in them
+        are not silently omitted from the report.
+        """
         lines = ["# Adversary Validation Report", ""]
 
         issues_count = 0
         complete_count = 0
 
-        for adv in adversaries:
-            issues = adv.validate()
+        for record in (*adversaries, *(environments or [])):
+            issues = record.validate()
             if issues:
                 issues_count += 1
-                lines.append(f"## {adv.name or 'UNNAMED'}")
+                lines.append(f"## {record.name or 'UNNAMED'}")
                 for issue in issues:
                     lines.append(f"- {issue}")
                 lines.append("")
@@ -253,11 +261,13 @@ class MarkdownWriter:
                 complete_count += 1
 
         # Summary at top
-        summary = [
-            f"**Total adversaries:** {len(adversaries)}",
+        summary = [f"**Total adversaries:** {len(adversaries)}"]
+        if environments:
+            summary.append(f"**Total environments:** {len(environments)}")
+        summary.extend([
             f"**Complete:** {complete_count}",
             f"**With issues:** {issues_count}",
-            ""
-        ]
+            "",
+        ])
 
         return "\n".join(summary + lines)

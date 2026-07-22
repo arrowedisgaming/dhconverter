@@ -29,6 +29,7 @@ MAX_BODY_SIZE = 60 * 1024 * 1024
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from models.adversary import Adversary
+from models.parse_result import ParseResult
 from parsers.md_parser import MDParser
 from writers.markdown_writer import MarkdownWriter
 from writers.index_generator import IndexGenerator
@@ -39,7 +40,7 @@ from utils.source_finder import SOURCE_CONFIGS
 # Safe wrapper for parse_source (raises instead of sys.exit)
 # ---------------------------------------------------------------------------
 
-def parse_source_safe(source_path: Path, source_name: str | None = None) -> list[Adversary]:
+def parse_source_safe(source_path: Path, source_name: str | None = None) -> ParseResult:
     """Parse a source file into a ParseResult. Raises on error instead of exit."""
     suffix = source_path.suffix.lower()
 

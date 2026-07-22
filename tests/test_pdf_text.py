@@ -38,9 +38,24 @@ class PUADigitTests(unittest.TestCase):
         # "Horde (10/HP)" — 0 sits at U+E53F, apart from the 1-9 run.
         self.assertEqual(decode_pua_digits("(/HP)"), "(10/HP)")
 
-    def test_full_digit_range_is_covered(self):
-        encoded = "".join(chr(0xE541 + n - 1) for n in range(1, 10))
-        self.assertEqual(decode_pua_digits(encoded), "123456789")
+    def test_observed_digits_decode(self):
+        """Digits confirmed by rendering the glyphs or by tier cross-check.
+
+        7 and 9 do not appear anywhere in the source book, so they are
+        extrapolated from the contiguous run and deliberately excluded here —
+        asserting them would only restate the extrapolation.
+        """
+        observed = {0: "0", 1: "1", 2: "2", 3: "3", 4: "4", 5: "5", 6: "6", 8: "8"}
+
+        for digit, expected in observed.items():
+            codepoint = 0xE53F if digit == 0 else 0xE541 + digit - 1
+            self.assertEqual(decode_pua_digits(chr(codepoint)), expected)
+
+    def test_unmapped_pua_characters_pass_through_untouched(self):
+        # Only the known digit codepoints are translated, so a different
+        # subset encoding degrades to visible junk rather than silently
+        # becoming a plausible wrong number.
+        self.assertEqual(decode_pua_digits(""), "")
 
     def test_text_without_pua_is_unchanged(self):
         self.assertEqual(decode_pua_digits("Difficulty: 12"), "Difficulty: 12")

@@ -207,6 +207,106 @@ class SocialRoutingTests(unittest.TestCase):
         self.assertEqual(len(result.environments), 1)
 
 
+class AdversarialReviewRegressionTests(unittest.TestCase):
+    """Cases found by an adversarial review of the Hope & Fear work."""
+
+    def test_labels_sharing_one_line_do_not_swallow_each_other(self):
+        # Column extraction does not guarantee one label per line.
+        page = styled_page(1, [
+            ("MARKET", LineStyle.HEADING),
+            ("Tier 1 Social", LineStyle.TIER),
+            ("A market.", LineStyle.BODY),
+            ("Impulses: Haggle", LineStyle.BODY),
+            ("Difficulty: 11 Potential Adversaries: Merchant, Guard", LineStyle.BODY),
+            ("FEATURES", LineStyle.BODY),
+            ("Crowd - Passive: It is busy.", LineStyle.BODY),
+        ])
+
+        env = parser()._parse_pages([page], "Test").environments[0]
+
+        self.assertEqual(env.difficulty, 11)
+        self.assertEqual(env.potential_adversaries, "Merchant, Guard")
+
+    def test_stale_section_header_does_not_discard_a_social_environment(self):
+        # A carried-over ADVERSARIES header used to beat unambiguous field
+        # shape, dropping the record entirely.
+        header = styled_page(1, [("TIER 1 ADVERSARIES (LEVEL 1)", LineStyle.HEADING)])
+        environment = styled_page(2, [
+            ("GRAND FEAST", LineStyle.HEADING),
+            ("Tier 1 Social", LineStyle.TIER),
+            ("A celebration.", LineStyle.BODY),
+            ("Impulses: Bring everyone together", LineStyle.BODY),
+            ("Difficulty: 11", LineStyle.BODY),
+            ("FEATURES", LineStyle.BODY),
+            ("Toast - Action: A speech.", LineStyle.BODY),
+        ])
+
+        result = parser()._parse_pages([header, environment], "Test")
+
+        self.assertEqual(len(result.environments), 1)
+        self.assertEqual(result.adversaries, [])
+
+    def test_stale_section_header_does_not_misroute_a_social_adversary(self):
+        header = styled_page(1, [("TIER 3 ENVIRONMENTS (LEVELS 5-7)", LineStyle.HEADING)])
+        adversary = styled_page(2, [
+            ("PAIN PRIEST", LineStyle.HEADING),
+            ("Tier 3 Social", LineStyle.TIER),
+            ("A priest.", LineStyle.BODY),
+            ("Motives & Tactics: Feed on emotions", LineStyle.BODY),
+            ("Difficulty: 16 | Thresholds: 16/32 | HP: 6 | Stress: 5", LineStyle.BODY),
+            ("FEATURES", LineStyle.BODY),
+            ("Walk - Action: Mark a Stress.", LineStyle.BODY),
+        ])
+
+        result = parser()._parse_pages([header, adversary], "Test")
+
+        self.assertEqual(len(result.adversaries), 1)
+        self.assertEqual(result.environments, [])
+
+    def test_hyphenated_line_breaks_rejoin_on_the_styled_path(self):
+        # The styled path replaced TextCleaner.clean_text and lost this.
+        page = styled_page(1, [
+            ("GOBLIN", LineStyle.HEADING),
+            ("Tier 1 Skulk", LineStyle.TIER),
+            ("A goblin.", LineStyle.BODY),
+            ("Motives & Tactics: Stab", LineStyle.BODY),
+            ("Difficulty: 10 | Thresholds: 4/8 | HP: 3 | Stress: 2", LineStyle.BODY),
+            ("FEATURES", LineStyle.BODY),
+            ("Burrow - Passive: It moves under-", LineStyle.BODY),
+            ("ground quickly.", LineStyle.BODY),
+        ])
+
+        adv = parser()._parse_pages([page], "Test").adversaries[0]
+
+        self.assertEqual(adv.features[0].description, "It moves underground quickly.")
+
+    def test_bare_page_numbers_do_not_attach_to_the_last_feature(self):
+        page = styled_page(1, [
+            ("GOBLIN", LineStyle.HEADING),
+            ("Tier 1 Skulk", LineStyle.TIER),
+            ("A goblin.", LineStyle.BODY),
+            ("Motives & Tactics: Stab", LineStyle.BODY),
+            ("Difficulty: 10 | Thresholds: 4/8 | HP: 3 | Stress: 2", LineStyle.BODY),
+            ("FEATURES", LineStyle.BODY),
+            ("Burrow - Passive: It moves.", LineStyle.BODY),
+            ("42", LineStyle.BODY),
+        ])
+
+        adv = parser()._parse_pages([page], "Test").adversaries[0]
+
+        self.assertEqual(adv.features[0].description, "It moves.")
+
+    def test_a_dash_at_end_of_line_is_not_treated_as_a_word_break(self):
+        from parsers.pdf_text import PageLine, clean_page_lines
+
+        lines = clean_page_lines([
+            PageLine("It attacks -", LineStyle.BODY),
+            PageLine("then retreats.", LineStyle.BODY),
+        ])
+
+        self.assertEqual([line.text for line in lines], ["It attacks -", "then retreats."])
+
+
 class FeatureHeadingTests(unittest.TestCase):
     def test_name_cannot_start_mid_sentence(self):
         # Matching the whole block let a name absorb trailing damage text,
@@ -232,6 +332,26 @@ class FeatureHeadingTests(unittest.TestCase):
         features = parser()._parse_pdf_features(text)
 
         self.assertEqual(features[0].name, "Into the Spider’s Web")
+
+    def test_a_name_containing_a_colon_is_still_matched(self):
+        text = "FEATURES\nPhase 1: The Trap - Action: The floor opens.\n"
+
+        features = parser()._parse_pdf_features(text)
+
+        self.assertEqual([f.name for f in features], ["Phase 1: The Trap"])
+        self.assertEqual(features[0].description, "The floor opens.")
+
+    def test_stat_lines_are_not_mistaken_for_feature_headings(self):
+        # Allowing colons in names must not let a stat line match.
+        text = (
+            "FEATURES\n"
+            "Difficulty: 10 | Thresholds: 4/8 | HP: 3 | Stress: 2\n"
+            "Burrow - Passive: It moves.\n"
+        )
+
+        self.assertEqual(
+            [f.name for f in parser()._parse_pdf_features(text)], ["Burrow"]
+        )
 
     def test_description_lines_are_folded_into_the_feature(self):
         text = (

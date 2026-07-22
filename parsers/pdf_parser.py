@@ -184,9 +184,10 @@ class PDFParser:
     def _coerce_page(page: PageInput) -> PageText:
         """Accept either styled pages or (page_number, text) tuples."""
         if isinstance(page, PageText):
-            return page
+            return page.ensure_cleaned()
         page_number, text = page
-        return PageText.from_text(page_number, TextCleaner.clean_text(text))
+        cleaned = TextCleaner.clean_text(text)
+        return PageText.from_text(page_number, cleaned).ensure_cleaned()
 
     def _trailing_section(
         self, page: PageText, section: Optional[str], section_tier: Optional[int]
@@ -315,6 +316,15 @@ class PDFParser:
             return True
 
         if is_ambiguous_type(type_name):
+            # Field shape is decisive when it is unambiguous: Impulses and no
+            # HP/Stress is an environment whatever section we think we are in,
+            # and HP/Stress is an adversary. Only fall back to the section
+            # header when the block itself does not say. A section header
+            # carried over from an earlier page is easily stale, and letting
+            # it win here silently discarded whole records.
+            shape = self._environment_by_shape(block.text)
+            if shape is not None:
+                return shape
             if block.section == "ENVIRONMENTS":
                 return True
             if block.section == "ADVERSARIES":
@@ -326,14 +336,29 @@ class PDFParser:
 
         return self._looks_like_environment(block.text)
 
-    @staticmethod
-    def _looks_like_environment(text: str) -> bool:
-        """Fall back to field shape: environments have Impulses and no HP."""
-        if re.search(r'^\s*Impulses\s*:', text, re.IGNORECASE | re.MULTILINE):
+    @classmethod
+    def _environment_by_shape(cls, text: str) -> Optional[bool]:
+        """Classify by field shape, or None when the block is not decisive.
+
+        Impulses with no combat track is unambiguously an environment; a
+        combat track is unambiguously an adversary. Anything else abstains.
+        """
+        has_impulses = bool(re.search(r'\bImpulses\s*:', text, re.IGNORECASE))
+        has_combat = bool(re.search(r'\b(?:HP|Stress)\s*:', text, re.IGNORECASE))
+
+        if has_impulses and not has_combat:
             return True
-        has_hp = re.search(r'\bHP\s*:', text, re.IGNORECASE)
-        has_stress = re.search(r'\bStress\s*:', text, re.IGNORECASE)
-        return not (has_hp or has_stress)
+        if has_combat and not has_impulses:
+            return False
+        return None
+
+    @classmethod
+    def _looks_like_environment(cls, text: str) -> bool:
+        """Fall back to field shape: environments have Impulses and no HP."""
+        shape = cls._environment_by_shape(text)
+        if shape is not None:
+            return shape
+        return not re.search(r'\b(?:HP|Stress)\s*:', text, re.IGNORECASE)
 
     def _tier_type(self, block: _Block) -> Optional[str]:
         """Read the type keyword off the block's tier line."""
@@ -661,37 +686,53 @@ class PDFParser:
 
         return env
 
-    @staticmethod
-    def _parse_environment_difficulty(text: str) -> Optional[Union[int, str]]:
-        """Read an environment's Difficulty, which is not always a number.
+    # Labels that end the preceding field's value. Column extraction does not
+    # guarantee one label per line — "Difficulty: 11 Potential Adversaries: ..."
+    # can arrive as a single line — so a value must stop at the next label
+    # wherever it appears, not merely at a line break.
+    _FIELD_LABELS = (
+        r'Impulses', r'Motives\s*(?:&|and)\s*Tactics', r'Motives',
+        r'Difficulty', r'Thresholds?', r'Potential\s+Adversaries',
+        r'ATK', r'Attack', r'Experience',
+    )
 
-        The Duel event prints `Difficulty: Special (see "Relative Strength")`,
-        so the raw text is preserved when no number is given.
+    @classmethod
+    def _field_value(cls, text: str, label: str) -> Optional[str]:
+        """Return a `Label: value` field, unwrapped onto one line.
+
+        The value runs until the next known label or the FEATURES section,
+        whichever comes first, on the same line or a later one.
         """
-        match = re.search(r'^Difficulty\s*:\s*(.+?)$', text, re.IGNORECASE | re.MULTILINE)
-        if not match:
-            return None
-
-        value = match.group(1).strip()
-        numeric = re.match(r'(\d+)\s*$', value)
-        if numeric:
-            return int(numeric.group(1))
-        return value or None
-
-    @staticmethod
-    def _parse_labelled_field(text: str, label: str) -> Optional[str]:
-        """Read a wrapped `Label: value` field up to the next label or section."""
+        next_label = '|'.join(cls._FIELD_LABELS)
         pattern = re.compile(
-            rf'^{label}\s*:\s*(.+?)(?=\n\s*(?:'
-            rf'Impulses|Motives|Difficulty|Thresholds?|Potential Adversaries|'
-            rf'ATK|Experience|FEATURES'
-            rf')\b|\Z)',
-            re.IGNORECASE | re.DOTALL | re.MULTILINE,
+            rf'\b{label}\s*:\s*(.+?)'
+            rf'(?=\s*(?:{next_label})\s*:|\s*\bFEATURES\b|\Z)',
+            re.IGNORECASE | re.DOTALL,
         )
         match = pattern.search(text)
         if not match:
             return None
-        return re.sub(r'\s*\n\s*', ' ', match.group(1)).strip()
+        value = re.sub(r'\s*\n\s*', ' ', match.group(1)).strip()
+        return value or None
+
+    @classmethod
+    def _parse_environment_difficulty(cls, text: str) -> Optional[Union[int, str]]:
+        """Read an environment's Difficulty, which is not always a number.
+
+        The Duel event prints `Difficulty: Special (see "Relative Strength")`,
+        so the printed text is preserved when no number is given.
+        """
+        value = cls._field_value(text, 'Difficulty')
+        if value is None:
+            return None
+
+        numeric = re.match(r'(\d+)\s*$', value)
+        return int(numeric.group(1)) if numeric else value
+
+    @classmethod
+    def _parse_labelled_field(cls, text: str, label: str) -> Optional[str]:
+        """Read a wrapped `Label: value` field up to the next label or section."""
+        return cls._field_value(text, label)
 
     def _parse_environment_features(self, block: _Block) -> list[EnvironmentFeature]:
         """Parse features, attaching the GM prompts that follow each one.
@@ -769,8 +810,13 @@ class PDFParser:
         "phy Double Swipe". The permissive name class accepts the typographic
         apostrophes and hyphens real names use ("Into the Spider's Web").
         """
+        # The name is anchored by the " - <Type>:" separator rather than by
+        # banning colons, so names that legitimately contain one ("Phase 1:
+        # The Trap") still match. Excluding colons dropped such features
+        # entirely, and with them any block whose only features were named
+        # that way.
         return re.compile(
-            r'^(?P<name>[^:]{1,70}?)\s+[-–—]\s+'
+            r'^(?P<name>.{1,70}?)\s+[-–—]\s+'
             r'(?P<type>Passive|Action|Reaction|Evolution)\s*:\s*'
             r'(?P<rest>.*)$',
             re.IGNORECASE,

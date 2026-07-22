@@ -232,7 +232,9 @@ def main():
 
     # Report mode
     if args.report:
-        report = MarkdownWriter.format_validation_report(result.adversaries)
+        report = MarkdownWriter.format_validation_report(
+            result.adversaries, environments=result.environments
+        )
         print(report)
         return
 

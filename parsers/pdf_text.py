@@ -19,9 +19,17 @@ the Daggerheart line rather than any single release:
 from __future__ import annotations
 
 import re
+import sys
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Iterable, Optional
+
+try:
+    from .text_cleaner import TextCleaner
+except ImportError:
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from parsers.text_cleaner import TextCleaner
 
 
 # Digits rendered in display fonts are mapped into the Private Use Area by the
@@ -35,13 +43,22 @@ PUA_DIGITS.update({0xE541 + n - 1: str(n) for n in range(1, 10)})
 _PUA_TABLE = str.maketrans(PUA_DIGITS)
 
 # Below this fraction of the font size, a gap between two extracted words is a
-# ligature or punctuation artifact rather than a real space. Measured gaps in
-# 8pt body text: real spaces >= 1.3pt, artifacts <= 0.4pt.
-_SPACE_GAP_RATIO = 0.12
+# ligature or punctuation artifact rather than a real space.
+#
+# Measured across every word pair in the Hope & Fear chapter: ligature and
+# punctuation artifacts top out at 0.078, and real prose spaces start at 0.152.
+# (Gaps between are table-of-contents dot leaders, on pages that hold no stat
+# blocks.) 0.11 sits near the geometric mean of those two bands.
+_SPACE_GAP_RATIO = 0.11
 
-# Vertical tolerance for treating two words as part of the same visual line,
-# as a fraction of the font size.
-_LINE_TOLERANCE_RATIO = 0.5
+# Vertical tolerance for treating two words as part of the same visual line, as
+# a fraction of the font size.
+#
+# Must exceed the baseline jitter between a bold label and its light-weight
+# value on one visual line (up to ~1.4pt at 8pt, i.e. 0.18) while staying under
+# the leading between distinct lines (>= 4.9pt, i.e. 0.61 at 8pt). 0.30 sits
+# between the two; the previous 0.5 left only 0.17pt of headroom at 12pt.
+_LINE_TOLERANCE_RATIO = 0.30
 
 
 class LineStyle(Enum):
@@ -91,10 +108,25 @@ class PageText:
 
     page_number: int
     lines: list[PageLine] = field(default_factory=list)
+    # Whether page furniture and hyphen breaks have already been resolved.
+    # Cleaning must happen per column, before columns are concatenated, or a
+    # hyphen at the foot of one column joins to the head of the next — so it
+    # cannot simply be redone later. Pages built by hand start out uncleaned.
+    cleaned: bool = False
 
     @property
     def text(self) -> str:
         return "\n".join(line.text for line in self.lines)
+
+    def ensure_cleaned(self) -> "PageText":
+        """Return this page with cleanup applied if it has not been already."""
+        if self.cleaned:
+            return self
+        return PageText(
+            page_number=self.page_number,
+            lines=clean_page_lines(self.lines),
+            cleaned=True,
+        )
 
     @classmethod
     def from_text(cls, page_number: int, text: str) -> "PageText":
@@ -109,10 +141,57 @@ class PageText:
             lines=[PageLine(text=line) for line in text.split("\n")],
         )
 
+    @classmethod
+    def from_cleaned_lines(cls, page_number: int, lines: list[PageLine]) -> "PageText":
+        """Build a page whose lines have already been cleaned per column."""
+        return cls(page_number=page_number, lines=lines, cleaned=True)
+
 
 def decode_pua_digits(text: str) -> str:
     """Replace Private Use Area digit glyphs with their ASCII digits."""
     return text.translate(_PUA_TABLE)
+
+
+def is_page_artifact(text: str) -> bool:
+    """True when a line is page furniture rather than stat-block content.
+
+    Style classification catches this for books whose fonts we recognise, but
+    the text-pattern check has to stay for every other book: dropping bare
+    folios and repeated running heads is behaviour the plain-text path has
+    always had, and losing it lets a stray page number attach itself to the
+    preceding feature's description.
+    """
+    stripped = text.strip()
+    if not stripped:
+        return False
+    if _FOOTER_RE.match(stripped):
+        return True
+    patterns = TextCleaner.PAGE_NUMBER_PATTERNS + TextCleaner.HEADER_PATTERNS
+    return any(re.match(pattern, stripped, re.IGNORECASE) for pattern in patterns)
+
+
+def clean_page_lines(lines: list["PageLine"]) -> list["PageLine"]:
+    """Drop page furniture and rejoin words hyphenated across a line break.
+
+    The styled extraction path replaces ``TextCleaner.clean_text``, which used
+    to do both of these on the joined page text. Doing it here keeps each
+    line's style intact.
+    """
+    kept: list[PageLine] = []
+
+    for line in lines:
+        if line.is_dropped() or is_page_artifact(line.text):
+            continue
+
+        # "under-" + "ground" is one word split across lines; "- " with a
+        # space before it is a dash and must not swallow the next line.
+        if kept and re.search(r'\w-$', kept[-1].text) and re.match(r'\w', line.text):
+            kept[-1].text = kept[-1].text[:-1] + line.text
+            continue
+
+        kept.append(line)
+
+    return kept
 
 
 def classify_font(fontname: str, size: float) -> LineStyle:
@@ -146,18 +225,15 @@ class PDFTextExtractor:
 
         if not words:
             raw = page.extract_text() or ""
-            return PageText.from_text(page_number, raw)
+            return PageText.from_text(page_number, raw).ensure_cleaned()
 
         lines: list[PageLine] = []
         for column in self._detect_columns(words, page.width):
-            lines.extend(self._group_words_into_lines(column))
+            # Cleanup runs per column: a hyphen-broken word must never be
+            # joined across the gutter to the top of the next column.
+            lines.extend(clean_page_lines(self._group_words_into_lines(column)))
 
-        kept = [
-            line
-            for line in lines
-            if not line.is_dropped() and not _FOOTER_RE.match(line.text.strip())
-        ]
-        return PageText(page_number=page_number, lines=kept)
+        return PageText.from_cleaned_lines(page_number, lines)
 
     @staticmethod
     def _extract_words(page) -> list[dict]:

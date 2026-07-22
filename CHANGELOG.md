@@ -39,6 +39,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Stress: None` parses as zero rather than missing data, so adversaries that can never mark Stress (Spellbound Armor) are no longer discarded as incomplete.
 - Environment difficulties that aren't numbers are preserved — the Duel event prints `Difficulty: Special (see "Relative Strength")`.
 - Names wrapping across two heading lines are rejoined, so `ALCHEMIST'S ABANDONED WORKSHOP` no longer truncates to its first line.
+- The font-aware extraction path no longer skips the cleanup the plain-text path performs. It had stopped removing bare page numbers and repeated running heads, and stopped rejoining words hyphenated across a line break (`under-` / `ground`), affecting every PDF rather than only *Hope and Fear*. Cleanup now runs per column, so a hyphen at the foot of one column cannot join to the head of the next.
+- A labelled environment field no longer swallows the next label when column extraction puts both on one line: `Difficulty: 11 Potential Adversaries: Merchant, Guard` previously parsed the whole remainder as the difficulty and dropped the roster, while still passing validation.
+- An adversary/environment section header carried over from an earlier page no longer overrides an unambiguous field shape. A stale `TIER n ADVERSARIES` header caused a `Social` environment to be parsed as an adversary and then silently discarded for lacking HP.
+- Feature names containing a colon (`Phase 1: The Trap`) are matched instead of rejected. A block whose only features were named that way was dropped entirely.
+- `--report` now includes environments; their validation issues were previously omitted from the report.
 - `Attack.from_string` now recognizes variable attack modifiers like `+2d4` and `+2d4+1`; both the JSON and Markdown writers preserve them as strings instead of dropping them.
 - `MDParser._parse_features` no longer absorbs trailing source footer text (`---`, `*Source:`, `*This stat block is...`) into the last feature's description.
 
