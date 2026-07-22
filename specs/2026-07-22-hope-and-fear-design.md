@@ -246,6 +246,6 @@ validation warnings. Verified end-to-end through both the CLI and the web UI.
   some point. Repairing it would change output for every existing book, so it
   is left for a separate decision; the feature-name pattern accepts typographic
   apostrophes directly instead.
-- The web UI's 50 MB upload cap rejects the 57 MB Hope & Fear PDF. Converting it
-  through the browser requires selecting it from `sources/` rather than
-  uploading, or raising `MAX_BODY_SIZE`.
+- ~~The web UI's 50 MB upload cap rejects the 57 MB Hope & Fear PDF.~~ Resolved:
+  `MAX_BODY_SIZE` raised to 60 MB, and browser upload of the full chapter
+  verified end-to-end.

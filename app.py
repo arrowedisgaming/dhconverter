@@ -21,8 +21,9 @@ from pathlib import Path
 # Project root = directory containing this script
 PROJECT_ROOT = Path(__file__).resolve().parent
 
-# Maximum request body size (50 MB)
-MAX_BODY_SIZE = 50 * 1024 * 1024
+# Maximum request body size (60 MB). Full-book PDFs run large — the Hope & Fear
+# adversaries chapter alone is ~57 MB before multipart encoding overhead.
+MAX_BODY_SIZE = 60 * 1024 * 1024
 
 # Add project root to sys.path so imports work
 sys.path.insert(0, str(PROJECT_ROOT))
