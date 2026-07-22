@@ -290,6 +290,149 @@ class ThresholdParsingTests(unittest.TestCase):
         self.assertEqual(adv.stress, 0)
 
 
+class AttackLineParsingTests(unittest.TestCase):
+    """The ATK line must be found by its label, not by prose containing "attack"."""
+
+    def block(self, description: str, atk_line: str = "ATK: -1 | Neuro Spore: Very Close | 4 mag") -> str:
+        return (
+            "TEST BEAST\n"
+            "Tier 2 Minion\n"
+            f"{description}\n"
+            "Motives & Tactics: Avoid violence, spray attackers\n"
+            "Difficulty: 13 | Thresholds: None | HP: 1 | Stress: 1\n"
+            f"{atk_line}\n"
+            "Experience: Darkness +3\n"
+            "FEATURES\n"
+            "Notable - Passive: It is notable.\n"
+        )
+
+    def parse(self, text: str):
+        result = parser_without_pdfplumber()._parse_adversaries_from_pages(
+            [(1, text)], "Test Source"
+        )
+        self.assertEqual(len(result.adversaries), 1)
+        return result.adversaries[0]
+
+    def test_prose_containing_the_word_attack_does_not_shadow_the_atk_line(self):
+        # The Fungispunj Sporeling's description ends "...defends itself from
+        # attackers...", which a case-insensitive search for "Attack" matched
+        # before the real ATK line, losing the whole attack.
+        adv = self.parse(self.block(
+            "A mushroom creature that defends itself from\n"
+            "attackers with tiny puffs of neurotoxic spores."
+        ))
+
+        self.assertEqual(adv.attack.modifier, "-1")
+        self.assertEqual(adv.attack.weapon_name, "Neuro Spore")
+        self.assertEqual(adv.attack.range, "Very Close")
+        self.assertEqual(adv.attack.damage, "4 mag")
+
+    def test_flat_damage_without_dice_is_kept(self):
+        adv = self.parse(self.block("A plain beast."))
+
+        self.assertEqual(adv.attack.damage, "4 mag")
+
+    def test_unicode_minus_modifier_is_normalised(self):
+        # Books typeset the sign as U+2212, not a hyphen.
+        adv = self.parse(self.block("A plain beast.", "ATK: −2 | Bite: Melee | 1d6 phy"))
+
+        self.assertEqual(adv.attack.modifier, "-2")
+        self.assertEqual(adv.attack.weapon_name, "Bite")
+
+    def test_a_prose_line_opening_with_the_label_does_not_win(self):
+        # Pins the rule that decides between candidates: this line starts with
+        # the label, so only the absence of pipe separators rejects it.
+        adv = self.parse(self.block("Attack when cornered. A plain beast."))
+
+        self.assertEqual(adv.attack.weapon_name, "Neuro Spore")
+        self.assertEqual(adv.attack.damage, "4 mag")
+
+    def test_prose_sharing_a_line_with_the_label_does_not_swallow_it(self):
+        # Each candidate consumes the rest of its line, so prose ahead of the
+        # real label on the same line took the pipes with it and lost the
+        # modifier. The spelled-out "Attack" must carry a colon to qualify.
+        adv = self.parse(self.block(
+            "A plain beast.",
+            "Attack when cornered. ATK: +2 | Bite: Melee | 1d6 phy",
+        ))
+
+        self.assertEqual(adv.attack.modifier, "+2")
+        self.assertEqual(adv.attack.weapon_name, "Bite")
+        self.assertEqual(adv.attack.damage, "1d6 phy")
+
+    def test_label_run_inline_after_the_other_stats_still_parses(self):
+        # Not every book gives the attack its own line.
+        text = (
+            "TEST BEAST\n"
+            "Tier 1 Standard\n"
+            "A test subject.\n"
+            "Motives & Tactics: Exist\n"
+            "Difficulty: 11 | Thresholds: 4/8 | HP: 4 | Stress: 3 | "
+            "ATK: +2 | Bite: Melee | 1d6 phy\n"
+            "FEATURES\n"
+            "Notable - Passive: It is notable.\n"
+        )
+
+        adv = self.parse(text)
+
+        self.assertEqual(adv.attack.modifier, "+2")
+        self.assertEqual(adv.attack.weapon_name, "Bite")
+        self.assertEqual(adv.attack.range, "Melee")
+        self.assertEqual(adv.attack.damage, "1d6 phy")
+
+
+class AgeStyleAttackTests(unittest.TestCase):
+    """Age of Umbra prints the weapon on its own line and ATK among the stats."""
+
+    def parse_stats(self, text: str) -> Adversary:
+        adv = Adversary(name="TEST BEAST")
+        parser_without_pdfplumber()._parse_pdf_stats(adv, text)
+        return adv
+
+    def test_modifier_is_read_when_the_label_runs_inline(self):
+        adv = self.parse_stats(
+            "Difficulty: 11 Thresholds: 4/8 HP: O O O ATK: +2\n"
+            "Long Knife: Melee - 2d6+6 phy\n"
+        )
+
+        self.assertEqual(adv.attack.modifier, "+2")
+        self.assertEqual(adv.attack.weapon_name, "Long Knife")
+        self.assertEqual(adv.attack.range, "Melee")
+        self.assertEqual(adv.attack.damage, "2d6+6 phy")
+
+    def test_unicode_minus_modifier_is_normalised(self):
+        adv = self.parse_stats(
+            "Difficulty: 11 HP: O O O ATK: −2\n"
+            "Long Knife: Melee - 2d6+6 phy\n"
+        )
+
+        self.assertEqual(adv.attack.modifier, "-2")
+
+    def test_a_value_quoted_in_prose_does_not_outrank_the_stat_line(self):
+        adv = self.parse_stats(
+            "Description: Its printed ATK: -9 is only an example.\n"
+            "Difficulty: 11 HP: O O O ATK: +2\n"
+            "Long Knife: Melee - 2d6+6 phy\n"
+        )
+
+        self.assertEqual(adv.attack.modifier, "+2")
+
+    def test_the_label_is_not_matched_inside_a_longer_word(self):
+        adv = self.parse_stats(
+            "SPLATK: -9 somewhere\n"
+            "Difficulty: 11 HP: O O O ATK: +2\n"
+            "Long Knife: Melee - 2d6+6 phy\n"
+        )
+
+        self.assertEqual(adv.attack.modifier, "+2")
+
+    def test_a_lone_label_still_parses_without_a_neighbouring_stat(self):
+        # The stat-line preference is only a tiebreak, not a requirement.
+        adv = self.parse_stats("ATK: +2\nLong Knife: Melee - 2d6+6 phy\n")
+
+        self.assertEqual(adv.attack.modifier, "+2")
+
+
 class SafeFilenameTests(unittest.TestCase):
     def test_long_adversary_name_is_capped(self):
         adversary = Adversary(name="A" * 300)

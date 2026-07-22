@@ -474,11 +474,30 @@ class PDFParser:
         # so both paths share one modifier grammar — parsing the modifier here
         # with a plain `\d+` truncated variable modifiers, turning "+2d4" into
         # "+2" with nothing to indicate the loss.
-        atk_match = re.search(
-            r'(?:ATK|Attack)\s*:?\s*([^\n]+)', text, re.IGNORECASE
+        # Every labelled candidate is considered and the first one carrying
+        # pipe separators wins. Taking only the first match and then testing it
+        # for pipes let prose shadow the real line: "defends itself from
+        # attackers" matched, carried no pipes, and the attack was dropped.
+        #
+        # The label is not anchored to the line start, because some books run
+        # it inline after the other stats. What keeps prose out instead is the
+        # shape of the label: "ATK" is an abbreviation that never appears in a
+        # sentence, while the spelled-out "Attack" must carry a colon. Without
+        # that, prose sharing a line with the real label ("Attack when
+        # cornered. ATK: +2 | ...") matched first and swallowed it.
+        payload = next(
+            (
+                match.group(1).strip()
+                for match in re.finditer(
+                    r'(?:\bATK\b[^\S\n]*:?|\bAttack[^\S\n]*:)[^\S\n]*([^\n]+)',
+                    text,
+                    re.IGNORECASE,
+                )
+                if '|' in match.group(1)
+            ),
+            None,
         )
-        if atk_match and '|' in atk_match.group(1):
-            payload = atk_match.group(1).strip()
+        if payload:
             attack = Attack.from_string(payload)
             # Attack.from_string requires a sign on the modifier. Some books
             # print it unsigned ("ATK: 2 | Bite: Melee | 1d6 phy"), which the
@@ -533,6 +552,30 @@ class PDFParser:
             adv.threshold_minor = int(legacy.group(1))
             adv.threshold_major = int(legacy.group(2))
 
+    @staticmethod
+    def _select_age_style_modifier(text: str) -> Optional[re.Match]:
+        """Pick the `ATK:` that belongs to the stat line, not one quoted in prose.
+
+        These books run the label inline after the HP pips, so it cannot be
+        anchored. Taking the first match anywhere let a description mentioning
+        an ATK value outrank the real one, and a label with no leading boundary
+        matched inside longer words. Candidates sharing a line with another
+        stat therefore win; the first match is only a fallback.
+        """
+        candidates = list(re.finditer(
+            r'\bATK:\s*([+\-−]?\d+(?:d\d+(?:[+\-−]\d+)?)?)', text, re.IGNORECASE
+        ))
+        if not candidates:
+            return None
+
+        def on_stat_line(match: re.Match) -> bool:
+            line = text[text.rfind('\n', 0, match.start()) + 1:match.end()]
+            return bool(re.search(
+                r'\b(?:Difficulty|Thresholds?|HP|Stress)\b\s*:', line, re.IGNORECASE
+            ))
+
+        return next((m for m in candidates if on_stat_line(m)), candidates[0])
+
     def _parse_age_style_attack(self, adv: Adversary, text: str) -> None:
         """Parse lines like `Long Knife: Melee - 2d6+6 phy` plus a separate ATK line."""
         range_pattern = r'(?:Melee|Very Close|Close|Far|Very Far)'
@@ -545,9 +588,9 @@ class PDFParser:
             return
 
         modifier = None
-        modifier_match = re.search(r'ATK:\s*([+-]?\d+(?:d\d+(?:[+-]\d+)?)?)', text, re.IGNORECASE)
+        modifier_match = self._select_age_style_modifier(text)
         if modifier_match:
-            modifier = modifier_match.group(1).strip()
+            modifier = modifier_match.group(1).strip().replace('−', '-')
 
         damage = weapon_match.group(3).strip()
         if damage.lower().startswith("threshold"):

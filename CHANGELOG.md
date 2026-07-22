@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-07-22
+
+### Fixed
+
+- Adversaries whose description or motives contained the word "attack" lost their entire ATK line. Only the first case-insensitive match for the label was considered, so "defends itself from **attack**ers" was found before the real `ATK:` line and, carrying no pipe separators, silently discarded the attack. Every labelled candidate is now considered and the first one carrying pipes wins. In *Hope and Fear* this affected the Fungispunj Sporeling, Entombed Cat Beast, Sprite, and Lamia; all 135 adversaries now convert with an attack.
+- `Attack.from_string` now accepts a negative modifier typeset with a Unicode minus sign (U+2212) or a dash rather than a hyphen, normalising it to ASCII instead of reading it as a nameless weapon. Both file-reading paths already stripped these characters during text cleanup, so no source converted differently before; this hardens the shared grammar itself, which callers reach directly. Only a field that is entirely a modifier is rewritten, so dashes in weapon and damage text are untouched.
+
 ## [0.4] - 2026-07-22
 
 ### Added

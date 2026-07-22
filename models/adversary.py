@@ -16,6 +16,11 @@ except ImportError:
 # modifiers used by some adversaries (+2d4, +d6, +2d4+1).
 _MODIFIER_RE = re.compile(r'^[+-](?:\d+|\d*d\d+(?:[+-]\d+)?)$')
 
+# Books typeset a negative modifier with U+2212 rather than a hyphen, and
+# Markdown pasted out of one keeps it. Normalised to ASCII before matching so
+# "−1" is a modifier and not a nameless weapon.
+_MINUS_SIGNS = str.maketrans({'−': '-', '–': '-', '—': '-'})
+
 
 @dataclass
 class Attack:
@@ -38,8 +43,9 @@ class Attack:
         attack = cls()
 
         for part in parts:
-            if _MODIFIER_RE.match(part):
-                attack.modifier = part
+            signed = part.translate(_MINUS_SIGNS)
+            if _MODIFIER_RE.match(signed):
+                attack.modifier = signed
             # Check for weapon: range pattern (colon separator)
             elif ":" in part:
                 weapon_range = part.split(":", 1)

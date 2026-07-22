@@ -197,6 +197,11 @@ class VariableAttackModifierTests(unittest.TestCase):
         self.assertEqual(attack.range, "Melee")
         self.assertEqual(attack.damage, "1d6 phy")
 
+    def test_unicode_minus_modifier_still_parses(self):
+        # Books typeset the sign as U+2212. The PDF path normalises it during
+        # text cleanup, but the shared grammar has to accept it too.
+        self.assertEqual(self.parse("ATK: −1 | Claw: Melee | 1d4 phy").modifier, "-1")
+
     def test_dice_modifier_is_not_coerced_to_int_in_yaml(self):
         adversary = Adversary(name="X")
         adversary.attack = self.parse("ATK: +2d4 | Chaos Orb: Far | 2d6+3 mag")
@@ -298,6 +303,34 @@ class YamlScalarSafetyTests(unittest.TestCase):
         lines = AdversaryBankWriter._yaml_dict_list_item({"name": "a", "q": []}, 2)
 
         self.assertIn("    q: []", lines)
+
+
+class MarkdownAttackModifierTests(unittest.TestCase):
+    """Markdown pasted out of a book keeps the book's Unicode minus sign."""
+
+    def test_blockquote_atk_line_normalises_a_unicode_minus(self):
+        from parsers.md_parser import MDParser
+
+        adv = Adversary(name="TEST BEAST")
+        MDParser._parse_blockquote_stats(
+            adv, "> **ATK:** −2 | **Bite:** Melee | 1d6 phy"
+        )
+
+        self.assertEqual(adv.attack.modifier, "-2")
+        self.assertEqual(adv.attack.weapon_name, "Bite")
+        self.assertEqual(adv.attack.range, "Melee")
+        self.assertEqual(adv.attack.damage, "1d6 phy")
+
+    def test_menagerie_atk_line_normalises_a_unicode_minus(self):
+        from parsers.md_parser import MDParser
+
+        adv = Adversary(name="TEST BEAST")
+        MDParser._parse_menagerie_stats(
+            adv, "**ATK: −2 | Bite: Melee | 1d6 phy**"
+        )
+
+        self.assertEqual(adv.attack.modifier, "-2")
+        self.assertEqual(adv.attack.weapon_name, "Bite")
 
 
 class CrossTypeCollisionTests(unittest.TestCase):
