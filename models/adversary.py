@@ -2,6 +2,14 @@
 from dataclasses import dataclass, field
 from typing import Optional
 import re
+import sys
+from pathlib import Path
+
+try:
+    from .naming import safe_filename
+except ImportError:
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from models.naming import safe_filename
 
 
 # Matches a signed attack modifier: plain integers (+4, -1) or variable dice
@@ -224,19 +232,5 @@ class Adversary:
         ])
 
     def safe_filename(self) -> str:
-        """Generate a safe filename from the adversary name."""
-        if not self.name:
-            return "unknown"
-        # Remove special characters, keep spaces (will become spaces in filename)
-        safe = re.sub(r'[^\w\s-]', '', self.name)
-        # Collapse multiple spaces
-        safe = re.sub(r'\s+', ' ', safe).strip()
-        # Defense-in-depth: strip path separators
-        safe = safe.replace('/', '').replace('\\', '')
-        safe = re.sub(
-            r"[A-Za-z]+(?:'[A-Za-z]+)?",
-            lambda match: match.group(0)[:1].upper() + match.group(0)[1:].lower(),
-            safe,
-        )
-        safe = safe[:120].rstrip()
-        return safe
+        """Generate a safe filename stem from the adversary name."""
+        return safe_filename(self.name)

@@ -8,6 +8,14 @@ italic GM question prompts.
 from dataclasses import dataclass, field
 from typing import Optional, Union
 import re
+import sys
+from pathlib import Path
+
+try:
+    from .naming import safe_filename
+except ImportError:
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from models.naming import safe_filename
 
 
 # Type keywords that only ever appear on an environment's tier line.
@@ -120,17 +128,5 @@ class Environment:
         ])
 
     def safe_filename(self) -> str:
-        """Generate a safe filename from the environment name."""
-        if not self.name:
-            return "unknown"
-        safe = re.sub(r'[^\w\s-]', '', self.name)
-        safe = re.sub(r'\s+', ' ', safe).strip()
-        # Defense-in-depth: strip path separators
-        safe = safe.replace('/', '').replace('\\', '')
-        safe = re.sub(
-            r"[A-Za-z]+(?:'[A-Za-z]+)?",
-            lambda match: match.group(0)[:1].upper() + match.group(0)[1:].lower(),
-            safe,
-        )
-        safe = safe[:120].rstrip()
-        return safe
+        """Generate a safe filename stem from the environment name."""
+        return safe_filename(self.name)

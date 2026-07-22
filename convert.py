@@ -119,7 +119,7 @@ def _write_records(records, output_dir: Path, overwrite, verbose, write) -> dict
 
         i = 1
         while output_path.name in used_filenames or (output_path.exists() and not overwrite):
-            output_path = output_dir / f"{base_name} ({i}).md"
+            output_path = output_dir / f"{base_name}_{i}.md"
             i += 1
 
         used_filenames.add(output_path.name)

@@ -225,7 +225,7 @@ class MarkdownWriter:
                 # Add suffix to avoid overwriting
                 i = 1
                 while output_path.exists():
-                    output_path = output_dir / f"{adv.safe_filename()} ({i}).md"
+                    output_path = output_dir / f"{adv.safe_filename()}_{i}.md"
                     i += 1
 
             cls.write_adversary(adv, output_path)

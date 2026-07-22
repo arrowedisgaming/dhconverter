@@ -73,6 +73,11 @@ Sources that contain environments write them to an `environments/` subfolder of 
 output directory, so you can add adversaries, environments, or both as library
 folders independently.
 
+Generated filenames contain only letters, digits, and underscores — for example
+`Alchemists_Abandoned_Workshop.md` — so they need no quoting in a shell and are
+safe on any filesystem. The adversary's real name, punctuation and all, is kept
+inside the file.
+
 The optional `adversaries.json` export also works as a combined library file, but the generated Markdown files are now the main path.
 
 ### Manual setup

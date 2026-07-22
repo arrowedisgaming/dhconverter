@@ -474,7 +474,7 @@ class EnvironmentModelTests(unittest.TestCase):
     def test_safe_filename_is_capped_and_sanitized(self):
         self.assertEqual(
             Environment(name="ALCHEMIST'S ABANDONED WORKSHOP").safe_filename(),
-            "Alchemists Abandoned Workshop",
+            "Alchemists_Abandoned_Workshop",
         )
         self.assertLessEqual(len(Environment(name="A" * 300).safe_filename()), 120)
 

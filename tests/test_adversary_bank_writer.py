@@ -104,8 +104,8 @@ class StructureTests(unittest.TestCase):
             )
 
             self.assertEqual(len(written), 2)
-            self.assertTrue((Path(tmp) / "Test Goblin.md").exists())
-            self.assertTrue((Path(tmp) / "Test Goblin (1).md").exists())
+            self.assertTrue((Path(tmp) / "Test_Goblin.md").exists())
+            self.assertTrue((Path(tmp) / "Test_Goblin_1.md").exists())
 
 
 class ScalarEscapingTests(unittest.TestCase):
