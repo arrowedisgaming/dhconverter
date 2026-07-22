@@ -19,9 +19,11 @@ from typing import Optional
 # Handle imports for both module and direct execution
 try:
     from ..models.adversary import Adversary, Feature
+    from ..models.environment import Environment, EnvironmentFeature
 except ImportError:
     sys.path.insert(0, str(Path(__file__).parent.parent))
     from models.adversary import Adversary, Feature
+    from models.environment import Environment, EnvironmentFeature
 
 
 # Maps source display names to Arrow's Adversary Bank source tags
@@ -32,6 +34,7 @@ SOURCE_TAG_MAP = {
     'Adversaries: Environments v1.5': 'environments',
     'Menagerie of Mayhem': 'menagerie',
     'Daggerheart System Reference Document': 'corebook',
+    'Hope and Fear': 'hope-and-fear',
 }
 
 
@@ -44,12 +47,18 @@ class BeastvaultWriter:
         adversaries: list[Adversary],
         output_path: Path,
         source_tag: Optional[str] = None,
+        environments: Optional[list[Environment]] = None,
     ) -> int:
         """Write adversaries as an Arrow's Adversary Bank JSON array file.
+
+        Environments, when given, are appended to the same array.
 
         Returns the number of entries written.
         """
         entries = [cls.format_adversary(adv, source_tag) for adv in adversaries]
+        entries.extend(
+            cls.format_environment(env, source_tag) for env in (environments or [])
+        )
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(
             json.dumps(entries, indent=2, ensure_ascii=False) + "\n",
@@ -67,7 +76,6 @@ class BeastvaultWriter:
         is emitted as "" for adversaries without experience data.
         """
         entry: dict = {}
-        is_env = cls._is_environment(adv)
 
         # Core identity fields
         if adv.name:
@@ -81,38 +89,32 @@ class BeastvaultWriter:
         if adv.difficulty is not None:
             entry["difficulty"] = adv.difficulty
 
-        # Motives vs impulses
         if adv.motives_tactics:
-            if is_env:
-                entry["impulses"] = adv.motives_tactics
-            else:
-                entry["motives"] = adv.motives_tactics
+            entry["motives"] = adv.motives_tactics
 
-        # Combat fields — only for non-environments
-        if not is_env:
-            if adv.hp is not None:
-                entry["hp"] = adv.hp
-            if adv.stress is not None:
-                entry["stress"] = adv.stress
+        if adv.hp is not None:
+            entry["hp"] = adv.hp
+        if adv.stress is not None:
+            entry["stress"] = adv.stress
 
-            if adv.attack and not adv.attack.is_empty():
-                modifier = cls._format_attack_modifier(adv.attack.modifier)
-                if modifier is not None:
-                    entry["attack"] = modifier
-                if adv.attack.weapon_name:
-                    entry["weapon"] = adv.attack.weapon_name
-                if adv.attack.range:
-                    entry["range"] = adv.attack.range
-                if adv.attack.damage:
-                    entry["damage"] = adv.attack.damage
+        if adv.attack and not adv.attack.is_empty():
+            modifier = cls._format_attack_modifier(adv.attack.modifier)
+            if modifier is not None:
+                entry["attack"] = modifier
+            if adv.attack.weapon_name:
+                entry["weapon"] = adv.attack.weapon_name
+            if adv.attack.range:
+                entry["range"] = adv.attack.range
+            if adv.attack.damage:
+                entry["damage"] = adv.attack.damage
 
-            thresholds = cls._format_thresholds(adv)
-            if thresholds:
-                entry["thresholds"] = thresholds
+        thresholds = cls._format_thresholds(adv)
+        if thresholds:
+            entry["thresholds"] = thresholds
 
-            # xp: emit "" for adversaries without experience, matching the
-            # existing built-in library data shape.
-            entry["xp"] = adv.experience if adv.experience else ""
+        # xp: emit "" for adversaries without experience, matching the
+        # existing built-in library data shape.
+        entry["xp"] = adv.experience if adv.experience else ""
 
         # Source tag
         tag = source_tag or cls._resolve_source_tag(adv)
@@ -126,9 +128,54 @@ class BeastvaultWriter:
         return entry
 
     @classmethod
-    def _is_environment(cls, adv: Adversary) -> bool:
-        """Detect environment stat blocks (no HP and no Stress)."""
-        return adv.hp is None and adv.stress is None
+    def format_environment(
+        cls, env: Environment, source_tag: Optional[str] = None
+    ) -> dict:
+        """Format an environment as an Arrow's Adversary Bank-compatible dict.
+
+        Combat fields are absent by construction rather than by inference.
+        """
+        entry: dict = {}
+
+        if env.name:
+            entry["name"] = env.name.upper()
+        if env.tier is not None:
+            entry["tier"] = env.tier
+        if env.environment_type:
+            entry["type"] = env.environment_type
+        if env.description:
+            entry["desc"] = env.description
+        if env.difficulty is not None:
+            entry["difficulty"] = env.difficulty
+        if env.impulses:
+            entry["impulses"] = env.impulses
+        if env.potential_adversaries:
+            entry["potential_adversaries"] = env.potential_adversaries
+
+        tag = source_tag or cls._resolve_source_tag(env)
+        if tag:
+            entry["source"] = tag
+
+        if env.features:
+            entry["features"] = [
+                cls._format_environment_feature(f) for f in env.features
+            ]
+
+        return entry
+
+    @classmethod
+    def _format_environment_feature(cls, feature: EnvironmentFeature) -> dict:
+        """Format an environment feature, including its GM prompts."""
+        entry: dict = {}
+        if feature.name:
+            entry["name"] = feature.name
+        if feature.feature_type:
+            entry["type"] = feature.feature_type
+        if feature.description:
+            entry["desc"] = feature.description
+        if feature.questions:
+            entry["questions"] = list(feature.questions)
+        return entry
 
     @classmethod
     def _format_attack_modifier(cls, modifier: Optional[str]) -> Optional[int | str]:

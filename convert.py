@@ -16,14 +16,16 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from models.adversary import Adversary
+from models.environment import Environment
+from models.parse_result import ParseResult
 from parsers.md_parser import MDParser
-from writers.adversary_bank_writer import AdversaryBankWriter
+from writers.adversary_bank_writer import AdversaryBankWriter, ENVIRONMENT_SUBFOLDER
 from writers.markdown_writer import MarkdownWriter
 from writers.index_generator import IndexGenerator
 
 
-def parse_source(source_path: Path) -> list[Adversary]:
-    """Parse adversaries from source file (PDF or MD)."""
+def parse_source(source_path: Path) -> ParseResult:
+    """Parse adversaries and environments from source file (PDF or MD)."""
     suffix = source_path.suffix.lower()
 
     if suffix == '.pdf':
@@ -46,38 +48,73 @@ def parse_source(source_path: Path) -> list[Adversary]:
         sys.exit(1)
 
 
-def list_adversaries(adversaries: list[Adversary]) -> None:
-    """Print a list of adversaries found."""
-    print(f"Found {len(adversaries)} adversaries:")
+def list_adversaries(result: ParseResult) -> None:
+    """Print a list of adversaries and environments found."""
+    print(f"Found {len(result.adversaries)} adversaries:")
     print()
+    for i, adv in enumerate(result.adversaries, 1):
+        _print_record(i, adv, adv.tier, adv.adversary_type)
 
-    for i, adv in enumerate(adversaries, 1):
-        tier_str = f"Tier {adv.tier}" if adv.tier else "Tier ?"
-        type_str = adv.adversary_type or "Unknown Type"
-        issues = adv.validate()
-        issues_str = f" [{len(issues)} issues]" if issues else ""
+    if result.environments:
+        print()
+        print(f"Found {len(result.environments)} environments:")
+        print()
+        for i, env in enumerate(result.environments, 1):
+            _print_record(i, env, env.tier, env.environment_type)
 
-        print(f"  {i:3}. {adv.name or 'UNNAMED'} ({tier_str} {type_str}){issues_str}")
+
+def _print_record(index: int, record, tier, type_name) -> None:
+    tier_str = f"Tier {tier}" if tier else "Tier ?"
+    type_str = type_name or "Unknown Type"
+    issues = record.validate()
+    issues_str = f" [{len(issues)} issues]" if issues else ""
+
+    print(f"  {index:3}. {record.name or 'UNNAMED'} ({tier_str} {type_str}){issues_str}")
 
 
 def convert_to_files(
-    adversaries: list[Adversary],
+    result: ParseResult,
     output_dir: Path,
     overwrite: bool = False,
     verbose: bool = True,
     readable_markdown: bool = False,
 ) -> dict[str, Path]:
-    """Convert adversaries to individual Markdown files."""
-    output_dir.mkdir(parents=True, exist_ok=True)
+    """Convert records to individual Markdown files.
+
+    Environments are written to an ``environments/`` subfolder so an Obsidian
+    library can point at either folder independently.
+    """
+    writer = MarkdownWriter if readable_markdown else AdversaryBankWriter
 
     if verbose:
-        print(f"Writing {len(adversaries)} adversaries to {output_dir}")
+        print(f"Writing {len(result.adversaries)} adversaries to {output_dir}")
         print()
 
-    written = {}
-    used_filenames = set()
-    for adv in adversaries:
-        base_name = adv.safe_filename()
+    written = _write_records(
+        result.adversaries, output_dir, overwrite, verbose, writer.write_adversary
+    )
+
+    if result.environments:
+        env_dir = output_dir / ENVIRONMENT_SUBFOLDER
+        if verbose:
+            print()
+            print(f"Writing {len(result.environments)} environments to {env_dir}")
+            print()
+        written.update(_write_records(
+            result.environments, env_dir, overwrite, verbose, writer.write_environment
+        ))
+
+    return written
+
+
+def _write_records(records, output_dir: Path, overwrite, verbose, write) -> dict[str, Path]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    written: dict[str, Path] = {}
+    used_filenames: set[str] = set()
+
+    for record in records:
+        base_name = record.safe_filename()
         output_path = output_dir / f"{base_name}.md"
 
         i = 1
@@ -87,19 +124,18 @@ def convert_to_files(
 
         used_filenames.add(output_path.name)
 
-        key = adv.name
+        key = record.name
         if key in written:
             i = 1
-            while f"{adv.name} ({i})" in written:
+            while f"{record.name} ({i})" in written:
                 i += 1
-            key = f"{adv.name} ({i})"
+            key = f"{record.name} ({i})"
 
-        writer = MarkdownWriter if readable_markdown else AdversaryBankWriter
-        writer.write_adversary(adv, output_path)
+        write(record, output_path)
         written[key] = output_path
 
         if verbose:
-            issues = adv.validate()
+            issues = record.validate()
             issues_mark = f" [{len(issues)} issues]" if issues else ""
             print(f"  ✓ {output_path.name}{issues_mark}")
 
@@ -177,23 +213,26 @@ def main():
 
     # Parse source
     print(f"Parsing {args.source}...")
-    adversaries = parse_source(args.source)
+    result = parse_source(args.source)
 
-    if not adversaries:
-        print("No adversaries found in source file.")
+    if not result:
+        print("No adversaries or environments found in source file.")
         sys.exit(0)
 
-    print(f"Found {len(adversaries)} adversaries")
+    print(f"Found {len(result.adversaries)} adversaries", end="")
+    if result.environments:
+        print(f" and {len(result.environments)} environments", end="")
+    print()
     print()
 
     # List mode
     if args.list:
-        list_adversaries(adversaries)
+        list_adversaries(result)
         return
 
     # Report mode
     if args.report:
-        report = MarkdownWriter.format_validation_report(adversaries)
+        report = MarkdownWriter.format_validation_report(result.adversaries)
         print(report)
         return
 
@@ -214,7 +253,7 @@ def main():
     written = {}
     if args.output:
         written = convert_to_files(
-            adversaries,
+            result,
             args.output,
             overwrite=args.overwrite,
             verbose=not args.quiet,
@@ -224,7 +263,12 @@ def main():
     # Generate index if requested
     if args.index and args.output:
         index_path = args.output / "Adversaries_Index.md"
-        IndexGenerator.write_index(adversaries, index_path, index_type="master")
+        IndexGenerator.write_index(
+            result.adversaries,
+            index_path,
+            index_type="master",
+            environments=result.environments,
+        )
         print()
         print(f"Generated index: {index_path}")
 
@@ -234,7 +278,9 @@ def main():
 
         json_dir = args.output if args.output else Path(".")
         json_path = json_dir / json_export
-        count = BeastvaultWriter.write_adversaries(adversaries, json_path)
+        count = BeastvaultWriter.write_adversaries(
+            result.adversaries, json_path, environments=result.environments
+        )
         if not args.quiet:
             print()
             print(f"Arrow's Adversary Bank JSON: {count} entries written to {json_path}")
@@ -245,9 +291,11 @@ def main():
         print(f"Conversion complete: {len(written)} files written to {args.output}")
 
     # Show validation summary
-    issues_count = sum(1 for adv in adversaries if adv.validate())
+    issues_count = sum(
+        1 for record in (*result.adversaries, *result.environments) if record.validate()
+    )
     if issues_count > 0:
-        print(f"Warning: {issues_count} adversaries have validation issues")
+        print(f"Warning: {issues_count} records have validation issues")
         print("Run with --report for details")
 
 

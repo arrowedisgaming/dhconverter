@@ -6,9 +6,10 @@ A local converter for turning [Daggerheart](https://www.daggerheart.com/) advers
 
 Daggerheart adversary stat blocks are typically published in dense PDFs or large multi-entry Markdown documents. This tool:
 
-- **Extracts** adversary stat blocks from PDFs (with smart two-column layout detection)
+- **Extracts** adversary and environment stat blocks from PDFs (with smart two-column layout detection)
 - **Parses** multi-adversary Markdown files (both community and standardized formats)
 - **Converts** each adversary into its own Arrow's Adversary Bank-readable Markdown file
+- **Handles** environments as their own record type, keeping Impulses, Potential Adversaries, and each feature's GM question prompts
 - **Normalizes** existing adversary files to a standard format
 - **Attributes** sources by searching original PDFs/MDs for each adversary name and page number
 - **Exports** optional combined JSON for Arrow's Adversary Bank and older BeastVault-style workflows
@@ -67,6 +68,10 @@ features:
 4. Under `Homebrew library`, choose the folder that contains the generated files.
 5. Run `Refresh library` from Arrow's Adversary Bank.
 6. Use `Insert adversary from library` and search for the converted adversaries.
+
+Sources that contain environments write them to an `environments/` subfolder of the
+output directory, so you can add adversaries, environments, or both as library
+folders independently.
 
 The optional `adversaries.json` export also works as a combined library file, but the generated Markdown files are now the main path.
 
@@ -163,9 +168,12 @@ dhadvconverter/
 ├── adversaries.html                    # Generated: sortable/filterable adversary reference
 ├── _SAMPLE.md                          # Reference: standardized output format (SRD content)
 ├── models/
-│   └── adversary.py                    # Adversary, Attack, Feature dataclasses
+│   ├── adversary.py                    # Adversary, Attack, Feature dataclasses
+│   ├── environment.py                  # Environment, EnvironmentFeature dataclasses
+│   └── parse_result.py                 # ParseResult: adversaries + environments
 ├── parsers/
-│   ├── pdf_parser.py                   # PDF extraction with column detection
+│   ├── pdf_text.py                     # Font-aware page extraction (columns, glyphs, lines)
+│   ├── pdf_parser.py                   # Stat-block parsing and adversary/environment routing
 │   ├── md_parser.py                    # Markdown format parsing
 │   └── text_cleaner.py                 # Unicode normalization, OCR artifact removal
 ├── writers/

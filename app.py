@@ -39,7 +39,7 @@ from utils.source_finder import SOURCE_CONFIGS
 # ---------------------------------------------------------------------------
 
 def parse_source_safe(source_path: Path, source_name: str | None = None) -> list[Adversary]:
-    """Parse adversaries from a source file. Raises on error instead of exit."""
+    """Parse a source file into a ParseResult. Raises on error instead of exit."""
     suffix = source_path.suffix.lower()
 
     if suffix == '.pdf':
@@ -243,12 +243,12 @@ class ConverterHandler(BaseHTTPRequestHandler):
             try:
                 source_path, tmp_path, source_name = self._resolve_source(fields)
 
-                # Parse adversaries
-                adversaries = parse_source_safe(source_path, source_name=source_name)
-                if not adversaries:
+                # Parse adversaries and environments
+                result = parse_source_safe(source_path, source_name=source_name)
+                if not result:
                     self._send_json({
                         "success": False,
-                        "error": "No adversaries found in source file.",
+                        "error": "No adversaries or environments found in source file.",
                     })
                     return
 
@@ -279,10 +279,12 @@ class ConverterHandler(BaseHTTPRequestHandler):
                 if do_markdown:
                     from convert import convert_to_files
                     written = convert_to_files(
-                        adversaries, output_dir,
+                        result, output_dir,
                         overwrite=overwrite, verbose=False
                     )
-                    files_written = [p.name for p in written.values()]
+                    files_written = [
+                        str(p.relative_to(output_dir)) for p in written.values()
+                    ]
 
                 # Optional combined JSON library file
                 if do_beastvault:
@@ -290,27 +292,38 @@ class ConverterHandler(BaseHTTPRequestHandler):
                     json_dir = output_dir if do_markdown else PROJECT_ROOT
                     json_path = json_dir / "adversaries.json"
                     json_dir.mkdir(parents=True, exist_ok=True)
-                    BeastvaultWriter.write_adversaries(adversaries, json_path)
+                    BeastvaultWriter.write_adversaries(
+                        result.adversaries, json_path, environments=result.environments
+                    )
                     beastvault_file = str(json_path.relative_to(PROJECT_ROOT))
 
                 # Master index
                 if do_index and do_markdown:
                     index_path = output_dir / "Adversaries_Index.md"
-                    IndexGenerator.write_index(adversaries, index_path, index_type="master")
+                    IndexGenerator.write_index(
+                        result.adversaries,
+                        index_path,
+                        index_type="master",
+                        environments=result.environments,
+                    )
                     files_written.append(index_path.name)
 
                 # Validation warnings
                 warnings = []
-                for adv in adversaries:
-                    issues = adv.validate()
+                for record in (*result.adversaries, *result.environments):
+                    issues = record.validate()
                     if issues:
                         warnings.append({
-                            "name": adv.name or "UNNAMED",
+                            "name": record.name or "UNNAMED",
                             "issues": issues,
                         })
 
                 issues_count = len(warnings)
-                summary_parts = [f"{len(adversaries)} adversaries converted."]
+                summary_parts = [f"{len(result.adversaries)} adversaries converted."]
+                if result.environments:
+                    summary_parts.append(
+                        f"{len(result.environments)} environments converted."
+                    )
                 if files_written:
                     summary_parts.append(f"{len(files_written)} files written to {output_dir_str}.")
                 if issues_count:
@@ -318,7 +331,8 @@ class ConverterHandler(BaseHTTPRequestHandler):
 
                 self._send_json({
                     "success": True,
-                    "adversary_count": len(adversaries),
+                    "adversary_count": len(result.adversaries),
+                    "environment_count": len(result.environments),
                     "files_written": files_written,
                     "beastvault_file": beastvault_file,
                     "validation_warnings": warnings,

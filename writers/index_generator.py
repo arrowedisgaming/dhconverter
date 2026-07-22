@@ -6,9 +6,11 @@ from typing import Optional
 # Handle imports for both module and direct execution
 try:
     from ..models.adversary import Adversary
+    from ..models.environment import Environment
 except ImportError:
     sys.path.insert(0, str(Path(__file__).parent.parent))
     from models.adversary import Adversary
+    from models.environment import Environment
 
 
 class IndexGenerator:
@@ -18,56 +20,90 @@ class IndexGenerator:
     def generate_master_index(
         cls,
         adversaries: list[Adversary],
-        title: str = "Adversaries Master Index"
+        title: str = "Adversaries Master Index",
+        environments: Optional[list[Environment]] = None,
     ) -> str:
         """Generate a master index markdown file.
 
         Groups adversaries by tier and includes quick reference stats.
+        Environments, when given, follow in their own section.
         """
         lines = [f"# {title}", ""]
 
-        # Group by tier
-        by_tier: dict[int, list[Adversary]] = {}
-        for adv in adversaries:
-            tier = adv.tier if adv.tier is not None else 0
-            if tier not in by_tier:
-                by_tier[tier] = []
-            by_tier[tier].append(adv)
+        # With environments present the two record kinds each get a section,
+        # so tier headings drop a level to sit beneath them.
+        sectioned = bool(environments)
+        tier_heading = "###" if sectioned else "##"
 
-        # Sort tiers and adversaries within tiers
-        for tier in sorted(by_tier.keys()):
-            tier_advs = sorted(by_tier[tier], key=lambda a: a.name or "")
+        if sectioned:
+            lines.extend(["## Adversaries", ""])
 
-            tier_name = f"Tier {tier}" if tier > 0 else "Unknown Tier"
-            lines.append(f"## {tier_name}")
+        by_tier = cls._group_by_tier(adversaries)
+        for tier in sorted(by_tier):
+            lines.append(f"{tier_heading} {cls._tier_name(tier)}")
             lines.append("")
-
-            # Table header
             lines.append("| Name | Type | Difficulty | Thresholds | HP | Stress |")
             lines.append("|------|------|------------|------------|----|----|")
 
-            for adv in tier_advs:
-                name = adv.name or "Unknown"
-                adv_type = adv.adversary_type or "-"
-                diff = str(adv.difficulty) if adv.difficulty is not None else "-"
-                thresh = adv.thresholds_str or "-"
-                hp = str(adv.hp) if adv.hp is not None else "-"
-                stress = str(adv.stress) if adv.stress is not None else "-"
-
-                lines.append(f"| {name} | {adv_type} | {diff} | {thresh} | {hp} | {stress} |")
+            for adv in sorted(by_tier[tier], key=lambda a: a.name or ""):
+                lines.append(
+                    f"| {adv.name or 'Unknown'} | {adv.adversary_type or '-'} "
+                    f"| {cls._or_dash(adv.difficulty)} | {adv.thresholds_str or '-'} "
+                    f"| {cls._or_dash(adv.hp)} | {cls._or_dash(adv.stress)} |"
+                )
 
             lines.append("")
+
+        env_by_tier: dict[int, list[Environment]] = {}
+        if environments:
+            lines.extend(["## Environments", ""])
+            env_by_tier = cls._group_by_tier(environments)
+
+            for tier in sorted(env_by_tier):
+                lines.append(f"{tier_heading} {cls._tier_name(tier)}")
+                lines.append("")
+                lines.append("| Name | Type | Difficulty | Impulses |")
+                lines.append("|------|------|------------|----------|")
+
+                for env in sorted(env_by_tier[tier], key=lambda e: e.name or ""):
+                    lines.append(
+                        f"| {env.name or 'Unknown'} | {env.environment_type or '-'} "
+                        f"| {cls._or_dash(env.difficulty)} | {env.impulses or '-'} |"
+                    )
+
+                lines.append("")
 
         # Summary statistics
         lines.append("## Summary")
         lines.append("")
         lines.append(f"**Total adversaries:** {len(adversaries)}")
 
-        for tier in sorted(by_tier.keys()):
-            tier_name = f"Tier {tier}" if tier > 0 else "Unknown Tier"
-            lines.append(f"- {tier_name}: {len(by_tier[tier])}")
+        for tier in sorted(by_tier):
+            lines.append(f"- {cls._tier_name(tier)}: {len(by_tier[tier])}")
+
+        if environments:
+            lines.append("")
+            lines.append(f"**Total environments:** {len(environments)}")
+            for tier in sorted(env_by_tier):
+                lines.append(f"- {cls._tier_name(tier)}: {len(env_by_tier[tier])}")
 
         return "\n".join(lines)
+
+    @staticmethod
+    def _group_by_tier(records: list) -> dict[int, list]:
+        """Group records by tier, filing missing tiers under 0."""
+        grouped: dict[int, list] = {}
+        for record in records:
+            grouped.setdefault(record.tier if record.tier is not None else 0, []).append(record)
+        return grouped
+
+    @staticmethod
+    def _tier_name(tier: int) -> str:
+        return f"Tier {tier}" if tier > 0 else "Unknown Tier"
+
+    @staticmethod
+    def _or_dash(value) -> str:
+        return str(value) if value is not None else "-"
 
     @classmethod
     def generate_type_index(
@@ -105,11 +141,12 @@ class IndexGenerator:
         cls,
         adversaries: list[Adversary],
         output_path: Path,
-        index_type: str = "master"
+        index_type: str = "master",
+        environments: Optional[list[Environment]] = None,
     ) -> None:
         """Write an index file."""
         if index_type == "master":
-            content = cls.generate_master_index(adversaries)
+            content = cls.generate_master_index(adversaries, environments=environments)
         elif index_type == "type":
             content = cls.generate_type_index(adversaries)
         else:

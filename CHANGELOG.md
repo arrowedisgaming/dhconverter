@@ -6,23 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Support for the *Hope and Fear* expansion, which the parser previously extracted **zero** records from. All 163 stat blocks (135 adversaries, 28 environments) now convert with no validation warnings.
+- Environments are a first-class record type. `models/environment.py` adds `Environment` and `EnvironmentFeature`, carrying `impulses`, `potential_adversaries`, and the italic GM question prompts that follow each feature.
+- Environments are written to an `environments/` subfolder of the output directory, so an Obsidian library can point at adversaries, environments, or both. They also get their own section in the generated index and are appended to the combined JSON export.
+- `parsers/pdf_text.py` — font-aware extraction layer, split out of `pdf_parser.py`. Classifies each line by its typography, which is what makes GM question prompts and decorative name art distinguishable from body text.
+- `models/parse_result.py` — `ParseResult`, the shared return type for both parsers.
+- `tests/test_pdf_text.py`, `tests/test_environment_parsing.py`, and `tests/test_hope_and_fear_integration.py`. The integration test skips unless the source PDF is present, since `docs/` is git-ignored.
+- `writers/adversary_bank_writer.py` — new Markdown writer that emits Arrow's Adversary Bank YAML code blocks. Uses a stdlib-only YAML emitter (JSON-encoded scalars) to keep the project zero-dependency.
+- `tests/test_adversary_bank_writer.py` — covers escape correctness, dict-list indentation, variable attack modifiers, and empty-field handling.
+
 ### Changed
 
+- **Breaking:** `PDFParser.parse_file` and `MDParser.parse_file` now return a `ParseResult` with separate `adversaries` and `environments` lists instead of a flat list. `MDParser.parse_adversaries` still returns a plain list for callers that only want adversaries.
+- `Adversary` gains `thresholds_raw`, preserving thresholds the book prints as text. Minions print `Thresholds: None` and adversaries destroyed at Major print a half pair such as `5/None`; neither survives as two integers, and both previously registered as missing data.
+- `BeastvaultWriter` formats environments from `Environment` objects rather than inferring them from absent HP, replacing a heuristic that disagreed with the one in `PDFParser`.
 - **Breaking:** Default per-adversary Markdown output now emits a `daggerheart`-fenced YAML code block readable by [Arrow's Adversary Bank](https://github.com/arrowedisgaming/arroweds-adversary-bank/) in Obsidian. Pass `--readable-markdown` to restore the previous human-readable stat-block format.
 - Renamed the JSON export flag to `--adversary-bank`; `--beastvault` is kept as a deprecated alias and now prints a one-line warning on stderr.
 - Web UI labels updated: "Markdown files" → "Arrow's Adversary Bank Markdown"; "BeastVault JSON" → "Combined JSON library". The internal form field name `beastvault` is preserved for API stability.
 - Launcher scripts (`Start Converter (Mac).command`, `Start Converter (Windows).bat`) now bootstrap a local `.venv` and install dependencies on first run.
 
-### Added
-
-- `writers/adversary_bank_writer.py` — new Markdown writer that emits Arrow's Adversary Bank YAML code blocks. Uses a stdlib-only YAML emitter (JSON-encoded scalars) to keep the project zero-dependency.
-- `tests/test_adversary_bank_writer.py` — covers escape correctness, dict-list indentation, variable attack modifiers, and empty-field handling.
-
 ### Fixed
 
+- PDF digits rendered from the Private Use Area are now decoded. Display fonts in *Hope and Fear* map tier numbers, horde and minion counts, and countdown values to `U+E53F` and `U+E541`–`U+E549` with no `ToUnicode` entry, so `Tier 1 Skulk` extracted as `Tier  Skulk` and every block failed to start.
+- Ligatures no longer split words. pdfplumber emits `fi`/`fl` ligatures as separate words with a zero x-gap, producing `Ruffi ans`, `fi nd`, and `battlefi eld`. Words are now joined by measured gap rather than unconditionally spaced, replacing a per-word blocklist.
+- Bold labels no longer separate from their values. Fixed-bucket line grouping split one visual line in two and sorted the value above its label, yielding `Avoid, escape, misdirect` above `Motives & Tactics:`.
+- Text parked outside the page box is discarded. *Hope and Fear* page 27 carries a hidden duplicate of the Roc at negative x, which never renders but interleaved with the real columns and corrupted both stat blocks on the page.
+- Feature names are matched at line start instead of anywhere in the block, so a name can no longer begin mid-sentence and absorb preceding damage text — `...1d8+1 phy` followed by `Double Swipe - Action:` produced a feature named `phy Double Swipe`. The name pattern also accepts typographic apostrophes and hyphens, which previously truncated `Into the Spider's Web` to `s Web`.
+- Running feet with a leading folio (`86 Chapter 3: Tier 3 Adversaries`) are dropped rather than appended to the preceding feature's description.
+- `Stress: None` parses as zero rather than missing data, so adversaries that can never mark Stress (Spellbound Armor) are no longer discarded as incomplete.
+- Environment difficulties that aren't numbers are preserved — the Duel event prints `Difficulty: Special (see "Relative Strength")`.
+- Names wrapping across two heading lines are rejoined, so `ALCHEMIST'S ABANDONED WORKSHOP` no longer truncates to its first line.
 - `Attack.from_string` now recognizes variable attack modifiers like `+2d4` and `+2d4+1`; both the JSON and Markdown writers preserve them as strings instead of dropping them.
 - `MDParser._parse_features` no longer absorbs trailing source footer text (`---`, `*Source:`, `*This stat block is...`) into the last feature's description.
-- PDF validation no longer silently drops environment-style records (`Traversal`, `Event`, `Exploration`): HP/Stress are now required only for combat adversaries, since environments have neither by design.
 
 ## [0.3] - 2026-04-04
 

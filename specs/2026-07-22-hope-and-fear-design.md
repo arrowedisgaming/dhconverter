@@ -63,6 +63,48 @@ the end of the feature description.
 `Thresholds: None` on minions, and decorative name art repeats the block name as
 a stray line (`AHUIZOTL`, `BUGBOAR` twice on page 2).
 
+### Found during implementation
+
+These were not visible from the initial survey and changed the design.
+
+**`Social` is not an environment-only keyword.** It labels both kinds — Hope &
+Fear has 5 Social adversaries and 6 Social environments — so the type keyword
+cannot route a block. Routing falls back to the enclosing `TIER n ADVERSARIES` /
+`TIER n ENVIRONMENTS` section header, then to field shape. `models/environment.py`
+splits `ENVIRONMENT_ONLY_TYPES` from `AMBIGUOUS_TYPES` to make this explicit.
+
+**Hidden off-page text.** Page 27 carries a full duplicate of the Roc stat block
+positioned at negative x, entirely outside the page box. It never renders, but
+it interleaved with the real two columns and corrupted both blocks on the page.
+Words are now kept only when their midpoint falls inside the page.
+
+**Feature names must anchor to line start.** Matching the old whole-block regex
+let a name begin mid-sentence and absorb preceding damage text, turning
+`...1d8+1 phy` + `Double Swipe - Action:` into a feature named
+`phy Double Swipe`. Line-anchored matching found 621 headings against the old
+regex's 598. No feature name in the book wraps across lines, so this is safe.
+The name pattern also had to accept typographic apostrophes (`’`, U+2019) and
+hyphens, which had truncated `Into the Spider's Web` to `s Web`.
+
+**Thresholds are not always a numeric pair.** Minions print `Thresholds: None`,
+and the Phantom prints `Thresholds: 5/None` — destroyed outright at Major. The
+half pair silently discarded a real minor threshold of 5. `Adversary` gains
+`thresholds_raw` to hold what was printed; `validate()` no longer reports these
+as missing.
+
+**`Stress: None`.** Spellbound Armor can never mark Stress. Parsed as 0 rather
+than missing, so the block is not discarded as incomplete.
+
+**Non-numeric environment difficulty.** The Duel event prints
+`Difficulty: Special (see "Relative Strength")`, so `Environment.difficulty` is
+typed `int | str`.
+
+**Names wrap across heading lines** (`ALCHEMIST'S ABANDONED` / `WORKSHOP`), so
+the name is the leading run of heading-styled lines rather than a single line.
+
+**Running feet merge with the folio** (`86 Chapter 3: Tier 3 Adversaries`), so
+the footer pattern allows a leading page number.
+
 ## Key insight: fonts classify lines
 
 Font name and size identify every line unambiguously, so question prompts and
@@ -185,7 +227,25 @@ and never committed.
 - `ParseResult` is a breaking return-type change, accepted deliberately; the CLI
   and web entry points are updated to match.
 
+## Outcome
+
+All 163 stat blocks in the chapter parse — 135 adversaries and 28 environments,
+against 163 tier lines in the visible text — with zero records dropped and zero
+validation warnings. Verified end-to-end through both the CLI and the web UI.
+
 ## Out of scope
 
 - Reworking the two-column detection heuristic beyond the line-grouping fix.
 - Changes to `normalize.py` beyond what `ParseResult` requires.
+
+## Known issues left alone
+
+- `TextCleaner.fix_common_ocr_errors` has a no-op smart-quote replacement: its
+  entries read `('"', '"')` and `("'", "'")`, replacing ASCII characters with
+  themselves. The curly forms they were meant to normalize were flattened at
+  some point. Repairing it would change output for every existing book, so it
+  is left for a separate decision; the feature-name pattern accepts typographic
+  apostrophes directly instead.
+- The web UI's 50 MB upload cap rejects the 57 MB Hope & Fear PDF. Converting it
+  through the browser requires selecting it from `sources/` rather than
+  uploading, or raising `MAX_BODY_SIZE`.

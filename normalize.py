@@ -83,7 +83,7 @@ def normalize_file(
         original_content = file_path.read_text(encoding='utf-8')
 
         # Parse adversary
-        adversaries = MDParser.parse_file(file_path)
+        adversaries = MDParser.parse_adversaries(file_path)
 
         if not adversaries:
             result['error'] = "Failed to parse adversary"
@@ -198,7 +198,7 @@ def generate_report(directory: Path) -> str:
     adversaries = []
 
     for file_path in files:
-        parsed = MDParser.parse_file(file_path)
+        parsed = MDParser.parse_adversaries(file_path)
         adversaries.extend(parsed)
 
     return MarkdownWriter.format_validation_report(adversaries)

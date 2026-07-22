@@ -13,9 +13,16 @@ from typing import Any
 
 try:
     from ..models.adversary import Adversary, Feature
+    from ..models.environment import Environment, EnvironmentFeature
 except ImportError:
     sys.path.insert(0, str(Path(__file__).parent.parent))
     from models.adversary import Adversary, Feature
+    from models.environment import Environment, EnvironmentFeature
+
+
+# Environments are written to their own subfolder so an Obsidian library can
+# point at adversaries, environments, or both.
+ENVIRONMENT_SUBFOLDER = "environments"
 
 
 class AdversaryBankWriter:
@@ -27,18 +34,53 @@ class AdversaryBankWriter:
         output_path.write_text(content, encoding="utf-8")
 
     @classmethod
+    def write_environment(cls, environment: Environment, output_path: Path) -> None:
+        content = cls.format_environment(environment)
+        output_path.write_text(content, encoding="utf-8")
+
+    @classmethod
     def write_multiple(
         cls,
         adversaries: list[Adversary],
         output_dir: Path,
         overwrite: bool = False,
+        environments: list[Environment] | None = None,
     ) -> dict[str, Path]:
-        output_dir.mkdir(parents=True, exist_ok=True)
-        written = {}
-        used_filenames = set()
+        """Write adversaries to ``output_dir`` and environments beneath it."""
+        written = cls._write_records(
+            adversaries, output_dir, overwrite, cls.write_adversary
+        )
 
-        for adv in adversaries:
-            base_name = adv.safe_filename()
+        if environments:
+            written.update(cls._write_records(
+                environments,
+                output_dir / ENVIRONMENT_SUBFOLDER,
+                overwrite,
+                cls.write_environment,
+            ))
+
+        return written
+
+    @classmethod
+    def write_environments(
+        cls,
+        environments: list[Environment],
+        output_dir: Path,
+        overwrite: bool = False,
+    ) -> dict[str, Path]:
+        """Write environments into ``output_dir`` itself."""
+        return cls._write_records(
+            environments, output_dir, overwrite, cls.write_environment
+        )
+
+    @classmethod
+    def _write_records(cls, records, output_dir: Path, overwrite: bool, write) -> dict[str, Path]:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        written: dict[str, Path] = {}
+        used_filenames: set[str] = set()
+
+        for record in records:
+            base_name = record.safe_filename()
             output_path = output_dir / f"{base_name}.md"
 
             i = 1
@@ -48,14 +90,14 @@ class AdversaryBankWriter:
 
             used_filenames.add(output_path.name)
 
-            key = adv.name
+            key = record.name
             if key in written:
                 i = 1
-                while f"{adv.name} ({i})" in written:
+                while f"{record.name} ({i})" in written:
                     i += 1
-                key = f"{adv.name} ({i})"
+                key = f"{record.name} ({i})"
 
-            cls.write_adversary(adv, output_path)
+            write(record, output_path)
             written[key] = output_path
 
         return written
@@ -71,6 +113,50 @@ class AdversaryBankWriter:
         lines.extend(cls._yaml_lines(cls._to_data(adv)))
         lines.extend(["```", ""])
         return "\n".join(lines)
+
+    @classmethod
+    def format_environment(cls, env: Environment) -> str:
+        display_name = cls._display_name(env.name)
+        lines = [
+            f"# {display_name}",
+            "",
+            "```daggerheart",
+        ]
+        lines.extend(cls._yaml_lines(cls._environment_to_data(env)))
+        lines.extend(["```", ""])
+        return "\n".join(lines)
+
+    @classmethod
+    def _environment_to_data(cls, env: Environment) -> dict[str, Any]:
+        data: dict[str, Any] = {}
+
+        cls._set(data, "name", cls._display_name(env.name) if env.name else None)
+        cls._set(data, "tier", env.tier)
+        cls._set(data, "type", env.environment_type)
+        cls._set(data, "desc", env.description)
+        cls._set(data, "difficulty", env.difficulty)
+        cls._set(data, "impulses", env.impulses)
+        cls._set(data, "potential_adversaries", env.potential_adversaries)
+
+        if env.source_name:
+            cls._set(data, "source", cls._source_value(env))
+
+        if env.features:
+            data["features"] = [
+                cls._environment_feature_data(feature) for feature in env.features
+            ]
+
+        return data
+
+    @classmethod
+    def _environment_feature_data(cls, feature: EnvironmentFeature) -> dict[str, Any]:
+        data: dict[str, Any] = {}
+        cls._set(data, "name", feature.name)
+        cls._set(data, "type", feature.feature_type)
+        cls._set(data, "desc", feature.description)
+        if feature.questions:
+            data["questions"] = list(feature.questions)
+        return data
 
     @classmethod
     def _to_data(cls, adv: Adversary) -> dict[str, Any]:

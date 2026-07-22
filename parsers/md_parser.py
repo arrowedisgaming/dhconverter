@@ -12,10 +12,12 @@ from typing import Optional
 # Handle imports for both module and direct execution
 try:
     from ..models.adversary import Adversary, Attack, Feature
+    from ..models.parse_result import ParseResult
     from .text_cleaner import TextCleaner
 except ImportError:
     sys.path.insert(0, str(Path(__file__).parent.parent))
     from models.adversary import Adversary, Attack, Feature
+    from models.parse_result import ParseResult
     from parsers.text_cleaner import TextCleaner
 
 
@@ -23,7 +25,16 @@ class MDParser:
     """Parser for Daggerheart adversary markdown files."""
 
     @classmethod
-    def parse_file(cls, file_path: Path) -> list[Adversary]:
+    def parse_file(cls, file_path: Path) -> ParseResult:
+        """Parse a markdown file into a :class:`ParseResult`.
+
+        Markdown sources carry adversaries only, so the environments list is
+        always empty; the shared return type keeps callers uniform.
+        """
+        return ParseResult(adversaries=cls.parse_adversaries(file_path))
+
+    @classmethod
+    def parse_adversaries(cls, file_path: Path) -> list[Adversary]:
         """Parse a markdown file and return list of adversaries."""
         text = file_path.read_text(encoding='utf-8')
         text = TextCleaner.clean_text(text)
@@ -195,12 +206,18 @@ class MDParser:
                 if diff_match and diff_match.group(1):
                     adv.difficulty = int(diff_match.group(1))
 
-                # Thresholds
-                thresh_match = re.search(r'\*{2}Thresholds:\*{2}\s*(\d+/\d+)?', line)
-                if thresh_match and thresh_match.group(1):
-                    adv.threshold_minor, adv.threshold_major = TextCleaner.extract_thresholds(
-                        thresh_match.group(1)
-                    )
+                # Thresholds. Minions print "None", and adversaries destroyed
+                # at Major print a half pair such as "5/None"; both are values
+                # rather than missing data, so keep what was printed.
+                thresh_match = re.search(
+                    r'\*{2}Thresholds:\*{2}\s*((?:\d+|None)(?:/(?:\d+|None))?)', line
+                )
+                if thresh_match:
+                    printed = thresh_match.group(1)
+                    minor, major = TextCleaner.extract_thresholds(printed)
+                    adv.threshold_minor, adv.threshold_major = minor, major
+                    if minor is None or major is None:
+                        adv.thresholds_raw = printed
 
                 # HP
                 hp_match = re.search(r'\*{2}HP:\*{2}\s*(\d+)?', line)

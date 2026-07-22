@@ -17,9 +17,11 @@ from typing import Optional
 # Handle imports for both module and direct execution
 try:
     from ..models.adversary import Adversary, Feature
+    from ..models.environment import Environment
 except ImportError:
     sys.path.insert(0, str(Path(__file__).parent.parent))
     from models.adversary import Adversary, Feature
+    from models.environment import Environment
 
 
 class MarkdownWriter:
@@ -95,6 +97,60 @@ class MarkdownWriter:
             lines.append("")
 
         # Ensure file ends with newline
+        return "\n".join(lines)
+
+    @classmethod
+    def write_environment(cls, environment: Environment, output_path: Path) -> None:
+        """Write environment to markdown file."""
+        content = cls.format_environment(environment)
+        output_path.write_text(content, encoding='utf-8')
+
+    @classmethod
+    def format_environment(cls, env: Environment) -> str:
+        """Format environment as standardized markdown string.
+
+        Mirrors the adversary layout, swapping the combat stat block for the
+        environment's Impulses and Potential Adversaries.
+        """
+        lines = []
+
+        name = env.name.upper() if env.name else "UNKNOWN"
+        lines.append(f"# {name}")
+        lines.append("")
+
+        if env.tier_line:
+            lines.append(f"***{env.tier_line}***  ")
+
+        if env.description:
+            lines.append(f"*{env.description.strip()}*  ")
+
+        if env.impulses:
+            lines.append(f"**Impulses:** {env.impulses}")
+
+        lines.append("")
+
+        difficulty = str(env.difficulty) if env.difficulty is not None else ""
+        lines.append(f"> **Difficulty:** {difficulty}  ")
+        if env.potential_adversaries:
+            lines.append(f"> **Potential Adversaries:** {env.potential_adversaries}")
+
+        lines.append("")
+
+        if env.features:
+            lines.append("## FEATURES")
+            lines.append("")
+
+            for feature in env.features:
+                lines.append(feature.to_markdown())
+                lines.append("")
+
+        source_line = cls._format_source_line(env)
+        if source_line:
+            lines.append("---")
+            lines.append("")
+            lines.append(source_line)
+            lines.append("")
+
         return "\n".join(lines)
 
     @classmethod

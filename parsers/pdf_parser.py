@@ -1,12 +1,14 @@
-"""PDF parser for Daggerheart adversary extraction.
+"""PDF parser for Daggerheart adversary and environment extraction.
 
-Uses pdfplumber for text extraction with smart column detection.
+Text extraction (columns, line grouping, glyph decoding) lives in
+:mod:`parsers.pdf_text`; this module turns the resulting lines into stat-block
+records.
 """
 import re
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
-from collections import defaultdict
+from typing import Optional, Union
 
 try:
     import pdfplumber
@@ -16,31 +18,64 @@ except ImportError:
 # Handle imports for both module and direct execution
 try:
     from ..models.adversary import Adversary, Attack, Feature
+    from ..models.environment import (
+        Environment,
+        EnvironmentFeature,
+        base_type,
+        is_ambiguous_type,
+        is_environment_only_type,
+    )
+    from ..models.parse_result import ParseResult
     from .text_cleaner import TextCleaner
+    from .pdf_text import LineStyle, PageLine, PageText, PDFTextExtractor
 except ImportError:
     sys.path.insert(0, str(Path(__file__).parent.parent))
     from models.adversary import Adversary, Attack, Feature
+    from models.environment import (
+        Environment,
+        EnvironmentFeature,
+        base_type,
+        is_ambiguous_type,
+        is_environment_only_type,
+    )
+    from models.parse_result import ParseResult
     from parsers.text_cleaner import TextCleaner
+    from parsers.pdf_text import LineStyle, PageLine, PageText, PDFTextExtractor
+
+
+# A page supplied either as styled lines or as plain text with a page number.
+PageInput = Union[PageText, tuple[int, str]]
+
+
+@dataclass
+class _Block:
+    """One stat block's lines, with the section it was found under."""
+
+    lines: list[PageLine]
+    page_number: int
+    section: Optional[str] = None  # "ADVERSARIES" | "ENVIRONMENTS" | None
+    section_tier: Optional[int] = None
+
+    @property
+    def text(self) -> str:
+        return "\n".join(line.text for line in self.lines)
 
 
 class PDFParser:
-    """Parser for extracting adversaries from PDF files."""
+    """Parser for extracting adversaries and environments from PDF files."""
 
-    # Patterns for identifying adversary boundaries
-    ADVERSARY_START_PATTERNS = [
-        r'^[A-Z][A-Z\s]+$',  # ALL CAPS NAME
-        r'^TIER\s+\d+',      # Tier indicator
-    ]
-
-    # Known adversary type keywords
+    # Known type keywords appearing on a tier line, for both record kinds.
     ADVERSARY_TYPES = [
         'Bruiser', 'Leader', 'Skulk', 'Support', 'Solo', 'Standard',
         'Ranged', 'Horde', 'Social', 'Minion',
         'Traversal', 'Event', 'Exploration',
     ]
 
-    # Environment-style types have no HP/Stress (see BeastvaultWriter._is_environment)
-    ENVIRONMENT_TYPES = {'traversal', 'event', 'exploration'}
+    # "TIER 3 ADVERSARIES (LEVELS 5-7)" / "TIER 1 ENVIRONMENTS (LEVEL 1)"
+    SECTION_RE = re.compile(
+        r'^TIER\s+(\d+)\s+(ADVERSARIES|ENVIRONMENTS)\b',
+        re.IGNORECASE,
+    )
 
     def __init__(self):
         if pdfplumber is None:
@@ -48,37 +83,34 @@ class PDFParser:
                 "pdfplumber is required for PDF parsing. "
                 "Install with: pip install pdfplumber"
             )
+        self.extractor = PDFTextExtractor()
 
-    def parse_file(self, file_path: Path, source_name: Optional[str] = None) -> list[Adversary]:
-        """Parse a PDF file and extract all adversaries."""
-        # Extract text with page information
-        page_texts = self._extract_text_with_pages(file_path)
+    # ------------------------------------------------------------------
+    # Entry points
+    # ------------------------------------------------------------------
 
-        # Derive source name from filename
+    def parse_file(
+        self, file_path: Path, source_name: Optional[str] = None
+    ) -> ParseResult:
+        """Parse a PDF file and extract all adversaries and environments."""
+        pages = self._extract_pages(file_path)
         source_name = source_name or self._filename_to_source_name(file_path.name)
+        return self._parse_pages(pages, source_name)
 
-        return self._parse_adversaries_from_pages(page_texts, source_name)
+    def _extract_pages(self, file_path: Path) -> list[PageText]:
+        """Extract every page as styled lines."""
+        with pdfplumber.open(file_path) as pdf:
+            pages = self.extractor.extract_pages(pdf)
+
+        for page in pages:
+            for line in page.lines:
+                line.text = TextCleaner.fix_common_ocr_errors(line.text)
+
+        return pages
 
     def _extract_text_with_pages(self, file_path: Path) -> list[tuple[int, str]]:
-        """Extract text from PDF with page numbers.
-
-        Returns list of (page_number, text) tuples.
-        Page numbers are 1-indexed for human readability.
-        """
-        page_texts = []
-
-        with pdfplumber.open(file_path) as pdf:
-            for page_num, page in enumerate(pdf.pages, start=1):
-                page_text = self._extract_page_with_columns(page)
-                page_text = TextCleaner.clean_text(page_text)
-                page_texts.append((page_num, page_text))
-
-        return page_texts
-
-    def _extract_text(self, file_path: Path) -> str:
-        """Extract text from PDF with column-aware layout (legacy method)."""
-        page_texts = self._extract_text_with_pages(file_path)
-        return '\n\n'.join(text for _, text in page_texts)
+        """Extract text from PDF with page numbers (legacy plain-text view)."""
+        return [(page.page_number, page.text) for page in self._extract_pages(file_path)]
 
     def _filename_to_source_name(self, filename: str) -> str:
         """Convert PDF filename to human-readable source name.
@@ -106,293 +138,293 @@ class PDFParser:
             name = 'Martial Adversaries'
         elif 'undeadadversaries' in lower_nospace:
             name = 'Undead Adversaries'
+        elif 'hopeandfear' in lower_nospace or lower_nospace.startswith('hf'):
+            name = 'Hope and Fear'
 
         return name
 
-    def _extract_page_with_columns(self, page) -> str:
-        """Extract text from a page, handling multi-column layouts."""
-        words = page.extract_words()
+    # ------------------------------------------------------------------
+    # Block discovery and routing
+    # ------------------------------------------------------------------
 
-        if not words:
-            return page.extract_text() or ""
+    def _parse_pages(self, pages: list[PageInput], source_name: str) -> ParseResult:
+        """Parse styled or plain-text pages into records."""
+        result = ParseResult()
+        section: Optional[str] = None
+        section_tier: Optional[int] = None
 
-        # Detect columns by analyzing x-coordinates
-        columns = self._detect_columns(words, page.width)
+        for page in pages:
+            page = self._coerce_page(page)
 
-        if len(columns) <= 1:
-            # Single column - use standard extraction
-            return page.extract_text() or ""
+            for block in self._split_into_blocks(page, section, section_tier):
+                section = block.section
+                section_tier = block.section_tier
 
-        # Multi-column: extract each column separately
-        column_texts = []
-        for col_words in columns:
-            # Sort by y (top to bottom), then x (left to right)
-            col_words.sort(key=lambda w: (w['top'], w['x0']))
+                record = self._parse_block(block)
+                if record is None:
+                    continue
+                record.source_name = source_name
+                record.source_page = page.page_number
+                if isinstance(record, Environment):
+                    result.environments.append(record)
+                else:
+                    result.adversaries.append(record)
 
-            # Group words into lines by y-position
-            lines = self._group_words_into_lines(col_words)
-            col_text = '\n'.join(lines)
-            column_texts.append(col_text)
+            section, section_tier = self._trailing_section(page, section, section_tier)
 
-        return '\n\n'.join(column_texts)
-
-    def _detect_columns(self, words: list[dict], page_width: float) -> list[list[dict]]:
-        """Detect column layout and group words by column."""
-        if not words:
-            return []
-
-        # Find the largest gap in x-positions near the center of the page
-        # to detect column boundaries more accurately
-        x_positions = sorted(set(round(w['x0']) for w in words))
-
-        # Look for the widest gap in the middle 60% of the page
-        center_zone_start = page_width * 0.2
-        center_zone_end = page_width * 0.8
-        best_gap = 0
-        best_split = page_width / 2  # fallback to midpoint
-
-        for i in range(len(x_positions) - 1):
-            gap_start = x_positions[i]
-            gap_end = x_positions[i + 1]
-            gap = gap_end - gap_start
-
-            # Only consider gaps in the center zone
-            gap_center = (gap_start + gap_end) / 2
-            if center_zone_start < gap_center < center_zone_end and gap > best_gap:
-                best_gap = gap
-                best_split = (gap_start + gap_end) / 2
-
-        # Need a minimum gap to consider it a column split (at least 3% of page width)
-        min_gap = page_width * 0.03
-        if best_gap < min_gap:
-            return [words]
-
-        left_col = []
-        right_col = []
-
-        for word in words:
-            if word['x0'] < best_split:
-                left_col.append(word)
-            else:
-                right_col.append(word)
-
-        columns = []
-        if left_col:
-            columns.append(left_col)
-        if right_col:
-            columns.append(right_col)
-
-        return columns if len(columns) > 1 else [words]
-
-    def _group_words_into_lines(self, words: list[dict], tolerance: float = 5) -> list[str]:
-        """Group words into lines based on y-position."""
-        if not words:
-            return []
-
-        # Group words by approximate y-position
-        lines_dict = defaultdict(list)
-        for word in words:
-            # Round y to nearest tolerance
-            y_key = round(word['top'] / tolerance) * tolerance
-            lines_dict[y_key].append(word)
-
-        # Sort lines by y-position and words within each line by x
-        lines = []
-        for y_key in sorted(lines_dict.keys()):
-            line_words = sorted(lines_dict[y_key], key=lambda w: w['x0'])
-            line_text = ' '.join(w['text'] for w in line_words)
-            lines.append(line_text)
-
-        return lines
+        return result
 
     def _parse_adversaries_from_pages(
-        self,
-        page_texts: list[tuple[int, str]],
-        source_name: str
-    ) -> list[Adversary]:
-        """Parse adversaries from page-tagged text blocks."""
-        adversaries = []
+        self, pages: list[PageInput], source_name: str
+    ) -> ParseResult:
+        """Parse records from page-tagged text blocks."""
+        return self._parse_pages(pages, source_name)
 
-        for page_num, page_text in page_texts:
-            page_text = TextCleaner.deduplicate_text(page_text)
-            blocks = self._split_into_adversary_blocks(page_text)
+    @staticmethod
+    def _coerce_page(page: PageInput) -> PageText:
+        """Accept either styled pages or (page_number, text) tuples."""
+        if isinstance(page, PageText):
+            return page
+        page_number, text = page
+        return PageText.from_text(page_number, TextCleaner.clean_text(text))
 
-            for block in blocks:
-                adv = self._parse_adversary_block(block)
-                if adv and self._is_valid_pdf_adversary(adv):
-                    adv.source_name = source_name
-                    adv.source_page = page_num
-                    adversaries.append(adv)
+    def _trailing_section(
+        self, page: PageText, section: Optional[str], section_tier: Optional[int]
+    ) -> tuple[Optional[str], Optional[int]]:
+        """Carry the last section header on a page over to the next page."""
+        for line in page.lines:
+            match = self.SECTION_RE.match(line.text.strip())
+            if match:
+                section_tier = int(match.group(1))
+                section = match.group(2).upper()
+        return section, section_tier
 
-        return adversaries
-
-    def _parse_adversaries_from_text(self, text: str) -> list[Adversary]:
-        """Parse adversaries from extracted text (legacy method)."""
-        adversaries = []
-
-        # Split text into potential adversary blocks
-        blocks = self._split_into_adversary_blocks(text)
-
-        for block in blocks:
-            adv = self._parse_adversary_block(block)
-            if adv and self._is_valid_pdf_adversary(adv):
-                adversaries.append(adv)
-
-        return adversaries
-
-    def _split_into_adversary_blocks(self, text: str) -> list[str]:
-        """Split text into individual adversary blocks.
-
-        Uses a two-pass strategy:
-        1. Primary: Find Tier lines, then look backward 1-2 lines for the name
-        2. Fallback: ALL-CAPS name detection (for backward compat with older PDFs)
-        """
-        lines = text.split('\n')
-
-        # Build a regex matching any known adversary type keyword
-        type_keywords = '|'.join(re.escape(t) for t in self.ADVERSARY_TYPES)
-        tier_pattern = re.compile(
-            rf'^Tier\s+\d+\s+(?:{type_keywords})',
-            re.IGNORECASE
+    def _tier_line_re(self) -> re.Pattern:
+        keywords = '|'.join(re.escape(t) for t in self.ADVERSARY_TYPES)
+        return re.compile(
+            rf'^Tier\s+(\d+)?\s*({keywords})(\s*\([^)]*\))?\s*$',
+            re.IGNORECASE,
         )
 
-        # Collect start-line indices where adversary blocks begin
-        start_indices = set()
+    def _split_into_blocks(
+        self,
+        page: PageText,
+        section: Optional[str],
+        section_tier: Optional[int],
+    ) -> list[_Block]:
+        """Split a page into stat blocks, anchored on tier lines.
 
-        # Pass 1: Tier-line backward lookup
+        Each block starts at its name line — the heading lines immediately
+        preceding the tier line — and runs to the next block or the end of the
+        page.
+        """
+        lines = page.lines
+        tier_re = self._tier_line_re()
+
+        # Section headers as they appear down the page, so each block inherits
+        # the section it sits under.
+        sections: dict[int, tuple[str, int]] = {}
         for i, line in enumerate(lines):
-            if tier_pattern.match(line.strip()):
-                # Look backward for the name line
-                name_idx = None
-                if i >= 2:
-                    two_back = lines[i - 2].strip()
-                    # Two-line name: first part ends with colon (e.g., "Dragon Lich:")
-                    if two_back and two_back.endswith(':') and lines[i - 1].strip():
-                        name_idx = i - 2
-                if name_idx is None and i >= 1 and lines[i - 1].strip():
-                    name_idx = i - 1
+            match = self.SECTION_RE.match(line.text.strip())
+            if match:
+                sections[i] = (match.group(2).upper(), int(match.group(1)))
 
-                if name_idx is not None:
-                    start_indices.add(name_idx)
-
-        # Pass 2: ALL-CAPS fallback for any blocks not caught by Tier lookup
+        starts: list[int] = []
         for i, line in enumerate(lines):
-            if i not in start_indices and self._is_adversary_start(line, []):
-                # Only add if there isn't already a nearby start index
-                # (within 2 lines) to avoid duplicates
-                if any(abs(i - s) <= 2 for s in start_indices):
-                    continue
-                # Verify a Tier line follows within the next 5 lines
-                # This prevents motives/tactics text in ALL-CAPS from
-                # being misidentified as adversary names
-                has_tier_nearby = any(
-                    re.match(r'^\s*Tier\s+\d+', lines[j], re.IGNORECASE)
-                    for j in range(i + 1, min(i + 6, len(lines)))
-                )
-                if has_tier_nearby:
-                    start_indices.add(i)
+            if tier_re.match(line.text.strip()):
+                name_start = self._find_name_start(lines, i)
+                if name_start is not None and name_start not in starts:
+                    starts.append(name_start)
 
-        if not start_indices:
-            return []
-
-        # Sort and split
-        sorted_starts = sorted(start_indices)
         blocks = []
-        for j, start in enumerate(sorted_starts):
-            end = sorted_starts[j + 1] if j + 1 < len(sorted_starts) else len(lines)
-            block = '\n'.join(lines[start:end])
-            if block.strip():
-                blocks.append(block)
+        for j, start in enumerate(starts):
+            end = starts[j + 1] if j + 1 < len(starts) else len(lines)
+
+            block_section, block_tier = section, section_tier
+            for index, (name, tier) in sections.items():
+                if index < start:
+                    block_section, block_tier = name, tier
+
+            block_lines = lines[start:end]
+            if any(line.text.strip() for line in block_lines):
+                blocks.append(_Block(
+                    lines=block_lines,
+                    page_number=page.page_number,
+                    section=block_section,
+                    section_tier=block_tier,
+                ))
 
         return blocks
 
-    def _is_valid_pdf_adversary(self, adv: Adversary) -> bool:
-        """Return True when a parsed PDF block has the minimum stat-block shape.
+    def _find_name_start(self, lines: list[PageLine], tier_index: int) -> Optional[int]:
+        """Locate the first line of the name preceding a tier line.
 
-        Environment-style records (Traversal, Event, Exploration) have no
-        HP/Stress by design, so those fields are only required for combat
-        adversaries.
+        With font information, the name is the run of heading lines directly
+        above the tier line — which handles names wrapping across two lines,
+        such as "ALCHEMIST'S ABANDONED / WORKSHOP". Without it, fall back to
+        the preceding non-empty line, extended one line up when it ends in a
+        colon ("Dragon Lich: / Decay-Bringer").
         """
+        styled = any(line.style is not None for line in lines)
+
+        if styled:
+            start = None
+            i = tier_index - 1
+            while i >= 0:
+                line = lines[i]
+                if line.style is not LineStyle.HEADING:
+                    break
+                if self.SECTION_RE.match(line.text.strip()):
+                    break
+                start = i
+                i -= 1
+            if start is not None:
+                return start
+
+        index = tier_index - 1
+        while index >= 0 and not lines[index].text.strip():
+            index -= 1
+        if index < 0:
+            return None
+
+        if index >= 1 and lines[index].text.strip().endswith(':'):
+            return index
+        if index >= 1 and lines[index - 1].text.strip().endswith(':'):
+            return index - 1
+        return index
+
+    def _parse_block(self, block: _Block) -> Optional[Union[Adversary, Environment]]:
+        """Parse a block into whichever record kind it represents."""
+        if self._is_environment_block(block):
+            environment = self._parse_environment_block(block)
+            return environment if self._is_valid_environment(environment) else None
+
+        adversary = self._parse_adversary_block(block)
+        return adversary if self._is_valid_pdf_adversary(adversary) else None
+
+    def _is_environment_block(self, block: _Block) -> bool:
+        """Decide whether a block is an environment.
+
+        The type keyword decides when it is unambiguous. "Social" is shared by
+        both kinds, so it defers to the enclosing section header and, failing
+        that, to the block's field shape.
+        """
+        type_name = self._tier_type(block)
+
+        if is_environment_only_type(type_name):
+            return True
+
+        if is_ambiguous_type(type_name):
+            if block.section == "ENVIRONMENTS":
+                return True
+            if block.section == "ADVERSARIES":
+                return False
+            return self._looks_like_environment(block.text)
+
+        if type_name:
+            return False
+
+        return self._looks_like_environment(block.text)
+
+    @staticmethod
+    def _looks_like_environment(text: str) -> bool:
+        """Fall back to field shape: environments have Impulses and no HP."""
+        if re.search(r'^\s*Impulses\s*:', text, re.IGNORECASE | re.MULTILINE):
+            return True
+        has_hp = re.search(r'\bHP\s*:', text, re.IGNORECASE)
+        has_stress = re.search(r'\bStress\s*:', text, re.IGNORECASE)
+        return not (has_hp or has_stress)
+
+    def _tier_type(self, block: _Block) -> Optional[str]:
+        """Read the type keyword off the block's tier line."""
+        tier_re = self._tier_line_re()
+        for line in block.lines:
+            match = tier_re.match(line.text.strip())
+            if match:
+                return match.group(2)
+        return None
+
+    # ------------------------------------------------------------------
+    # Shared block helpers
+    # ------------------------------------------------------------------
+
+    def _parse_name(self, lines: list[PageLine]) -> str:
+        """Read the name from the leading lines of a block.
+
+        Names wrap across lines ("ALCHEMIST'S ABANDONED / WORKSHOP"). With font
+        information the name is the leading run of heading lines; otherwise a
+        trailing colon marks a continuation ("Dragon Lich: / Decay-Bringer").
+        """
+        collected: list[str] = []
+
+        for line in lines:
+            stripped = line.text.strip()
+            if not stripped:
+                if collected:
+                    break
+                continue
+            if re.match(r'^Tier\b', stripped, re.IGNORECASE):
+                break
+
+            collected.append(stripped)
+
+            if line.style is LineStyle.HEADING:
+                continue
+            if line.style is None and stripped.endswith(':'):
+                continue
+            break
+
+        return ' '.join(collected)
+
+    @staticmethod
+    def _parse_tier_line(text: str) -> tuple[Optional[int], Optional[str]]:
+        """Read tier number and type keyword from a block's tier line."""
+        match = re.search(
+            r'Tier\s+(\d+)?\s*(\w+(?:\s*\([^)]+\))?)',
+            text, re.IGNORECASE
+        )
+        if not match:
+            return None, None
+        tier = int(match.group(1)) if match.group(1) else None
+        return tier, match.group(2)
+
+    # ------------------------------------------------------------------
+    # Adversary parsing
+    # ------------------------------------------------------------------
+
+    def _parse_adversary_block(self, block: _Block) -> Optional[Adversary]:
+        """Parse a single adversary block into an Adversary object."""
+        text = block.text
+        if not text.strip():
+            return None
+
+        adv = Adversary()
+        adv.name = self._parse_name(block.lines)
+        adv.tier, adv.adversary_type = self._parse_tier_line(text)
+        if adv.tier is None:
+            adv.tier = block.section_tier
+
+        self._parse_pdf_stats(adv, text)
+        self._parse_pdf_description(adv, text)
+        self._parse_pdf_motives(adv, text)
+        adv.features = self._parse_pdf_features(text)
+
+        return adv
+
+    def _is_valid_pdf_adversary(self, adv: Optional[Adversary]) -> bool:
+        """Return True when a parsed block has the minimum stat-block shape."""
+        if adv is None:
+            return False
         if not adv.name or len(adv.name) > 120:
             return False
-        has_core_fields = all([
+        return all([
             adv.tier is not None,
             adv.adversary_type,
             adv.difficulty is not None,
             bool(adv.features),
+            adv.hp is not None,
+            adv.stress is not None,
         ])
-        if not has_core_fields:
-            return False
-        if self._is_environment_type(adv.adversary_type):
-            return True
-        return adv.hp is not None and adv.stress is not None
-
-    @classmethod
-    def _is_environment_type(cls, adversary_type: Optional[str]) -> bool:
-        """Check whether a parsed type keyword is an environment-style type."""
-        if not adversary_type:
-            return False
-        # Strip parentheticals like "Horde (8/HP)" before comparing
-        base_type = adversary_type.split('(')[0].strip().lower()
-        return base_type in cls.ENVIRONMENT_TYPES
-
-    def _is_adversary_start(self, line: str, current_block: list) -> bool:
-        """Determine if a line starts a new adversary block."""
-        stripped = line.strip()
-
-        if not stripped:
-            return False
-
-        # ALL CAPS line that's not a section header (allow commas/colons for names like "XERO, CASTLE KILLER")
-        if (re.match(r'^[A-Z][A-Z\s,:]+$', stripped) and
-            len(stripped) > 3 and
-            stripped not in ('FEATURES', 'ACTIONS', 'REACTIONS', 'PASSIVE')):
-
-            # Check if next lines look like adversary content
-            return True
-
-        return False
-
-    def _parse_adversary_block(self, block: str) -> Optional[Adversary]:
-        """Parse a single adversary block into an Adversary object."""
-        if not block.strip():
-            return None
-
-        adv = Adversary()
-        lines = block.split('\n')
-
-        # First non-empty line is usually the name
-        for i, line in enumerate(lines):
-            if line.strip():
-                adv.name = line.strip()
-                # Multi-line names: "Dragon Lich:" on one line, "Decay-Bringer" on the next
-                if adv.name.endswith(':') and i + 1 < len(lines):
-                    next_line = lines[i + 1].strip()
-                    if next_line and not re.match(r'^Tier\s+\d+', next_line, re.IGNORECASE):
-                        adv.name = adv.name + ' ' + next_line
-                break
-
-        # Look for Tier line (captures "Horde (8/HP)" style parentheticals)
-        tier_match = re.search(
-            r'Tier\s+(\d+)\s+(\w+(?:\s*\([^)]+\))?)',
-            block, re.IGNORECASE
-        )
-        if tier_match:
-            adv.tier = int(tier_match.group(1))
-            adv.adversary_type = tier_match.group(2)
-
-        # Parse stats: Difficulty, Thresholds, HP, Stress
-        self._parse_pdf_stats(adv, block)
-
-        # Parse description (italic-like text or flavor text)
-        self._parse_pdf_description(adv, block)
-
-        self._parse_pdf_motives(adv, block)
-
-        # Parse features
-        adv.features = self._parse_pdf_features(block)
-
-        return adv
 
     def _parse_pdf_stats(self, adv: Adversary, text: str) -> None:
         """Parse stat values from PDF text."""
@@ -401,17 +433,7 @@ class PDFParser:
         if diff_match:
             adv.difficulty = int(diff_match.group(1))
 
-        # Thresholds (various formats)
-        thresh_patterns = [
-            r'Thresholds?[:\s]+(\d+)\s*/\s*(\d+)',
-            r'Minor[:\s]+(\d+).*Major[:\s]+(\d+)',
-        ]
-        for pattern in thresh_patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                adv.threshold_minor = int(match.group(1))
-                adv.threshold_major = int(match.group(2))
-                break
+        self._parse_thresholds(adv, text)
 
         adv.hp = self._parse_stat_value(text, "HP")
         adv.stress = self._parse_stat_value(text, "Stress")
@@ -438,6 +460,35 @@ class PDFParser:
         )
         if exp_match:
             adv.experience = exp_match.group(1).strip()
+
+    @staticmethod
+    def _parse_thresholds(adv: Adversary, text: str) -> None:
+        """Parse thresholds, keeping the printed form when a side reads "None".
+
+        Minions print "Thresholds: None"; adversaries destroyed outright at
+        Major print a half pair such as "5/None". Both are real values, so the
+        printed text is retained alongside whichever number is present.
+        """
+        value = r'\d+|None'
+        match = re.search(
+            rf'Thresholds?[:\s]+({value})\s*/\s*({value})', text, re.IGNORECASE
+        )
+        if match:
+            minor, major = match.group(1), match.group(2)
+            adv.threshold_minor = int(minor) if minor.isdigit() else None
+            adv.threshold_major = int(major) if major.isdigit() else None
+            if not (minor.isdigit() and major.isdigit()):
+                adv.thresholds_raw = f"{minor}/{major}"
+            return
+
+        if re.search(r'Thresholds?[:\s]+None\b', text, re.IGNORECASE):
+            adv.thresholds_raw = "None"
+            return
+
+        legacy = re.search(r'Minor[:\s]+(\d+).*Major[:\s]+(\d+)', text, re.IGNORECASE)
+        if legacy:
+            adv.threshold_minor = int(legacy.group(1))
+            adv.threshold_major = int(legacy.group(2))
 
     def _parse_age_style_attack(self, adv: Adversary, text: str) -> None:
         """Parse lines like `Long Knife: Melee - 2d6+6 phy` plus a separate ATK line."""
@@ -485,6 +536,12 @@ class PDFParser:
         if numeric_match:
             return int(numeric_match.group(1))
 
+        # Some adversaries print "None" for a track they can never mark, e.g.
+        # Spellbound Armor's "Stress: None". That is a value of zero, not a
+        # missing field, so the block must not be discarded as incomplete.
+        if re.search(rf'{label}\s*:\s*None\b', text, re.IGNORECASE):
+            return 0
+
         if label.lower() == "stress":
             after_label_match = re.search(
                 r'Stress:\s*((?:[O0]\s*)+)',
@@ -519,36 +576,39 @@ class PDFParser:
 
     def _parse_pdf_description(self, adv: Adversary, text: str) -> None:
         """Extract description/flavor text from PDF block."""
-        # Look for text between name/tier and Motives
-        # This is typically italic in the PDF
+        adv.description = self._parse_description(text, adv.name, stop_labels=(
+            'Motives', 'Impulses', 'Difficulty', 'Thresholds?', 'ATK', 'FEATURES',
+        ))
+
+    def _parse_description(
+        self, text: str, name: Optional[str], stop_labels: tuple[str, ...]
+    ) -> Optional[str]:
+        """Collect the flavor text between the tier line and the first label."""
         lines = text.split('\n')
         in_description = False
         desc_lines = []
 
-        # Build a set of name-line strings to skip (handles multi-line names)
         name_parts = set()
-        if adv.name:
-            name_parts.add(adv.name)
-            # For multi-line names like "Dragon Lich: Decay-Bringer",
-            # also skip each individual line
-            for part in adv.name.split(': ', 1):
+        if name:
+            name_parts.add(name)
+            for part in name.split(': ', 1):
                 name_parts.add(part)
-                name_parts.add(part + ':')  # "Dragon Lich:"
+                name_parts.add(part + ':')
+
+        stop_re = re.compile(rf'^({"|".join(stop_labels)})\b', re.IGNORECASE)
 
         for line in lines:
             stripped = line.strip()
 
-            # Skip name lines (ALL-CAPS or matching the parsed name)
-            if re.match(r'^[A-Z][A-Z\s,:]+$', stripped):
+            if re.match(r'^[A-Z][A-Z\s,:\'’]+$', stripped):
                 continue
             if stripped in name_parts:
                 continue
-            if re.match(r'^Tier\s+\d+', stripped, re.IGNORECASE):
+            if re.match(r'^Tier\b', stripped, re.IGNORECASE):
                 in_description = True
                 continue
 
-            # Stop at Motives or stats
-            if re.search(r'^(Motives|Difficulty|Thresholds?|ATK|FEATURES)\b', stripped, re.IGNORECASE):
+            if stop_re.match(stripped):
                 break
             if re.match(r'^[^:\n]+:\s*(?:Melee|Very Close|Close|Far|Very Far)\s*-', stripped, re.IGNORECASE):
                 break
@@ -561,46 +621,218 @@ class PDFParser:
             if in_description and stripped:
                 desc_lines.append(stripped)
 
-        if desc_lines:
-            adv.description = ' '.join(desc_lines)
+        return ' '.join(desc_lines) if desc_lines else None
 
     def _parse_pdf_features(self, text: str) -> list[Feature]:
         """Parse features from PDF text."""
+        return [
+            Feature(name=name, feature_type=ftype, description=desc)
+            for name, ftype, desc, _ in self._iter_features(text)
+        ]
+
+    # ------------------------------------------------------------------
+    # Environment parsing
+    # ------------------------------------------------------------------
+
+    def _parse_environment_block(self, block: _Block) -> Optional[Environment]:
+        """Parse a single block into an Environment object."""
+        text = block.text
+        if not text.strip():
+            return None
+
+        env = Environment()
+        env.name = self._parse_name(block.lines)
+        tier, type_name = self._parse_tier_line(text)
+        env.tier = tier if tier is not None else block.section_tier
+        env.environment_type = base_type(type_name) or None
+
+        env.description = self._parse_description(text, env.name, stop_labels=(
+            'Impulses', 'Motives', 'Difficulty', 'Potential', 'FEATURES',
+        ))
+
+        env.impulses = self._parse_labelled_field(text, 'Impulses')
+        env.potential_adversaries = self._parse_labelled_field(
+            text, 'Potential Adversaries'
+        )
+
+        env.difficulty = self._parse_environment_difficulty(text)
+
+        env.features = self._parse_environment_features(block)
+
+        return env
+
+    @staticmethod
+    def _parse_environment_difficulty(text: str) -> Optional[Union[int, str]]:
+        """Read an environment's Difficulty, which is not always a number.
+
+        The Duel event prints `Difficulty: Special (see "Relative Strength")`,
+        so the raw text is preserved when no number is given.
+        """
+        match = re.search(r'^Difficulty\s*:\s*(.+?)$', text, re.IGNORECASE | re.MULTILINE)
+        if not match:
+            return None
+
+        value = match.group(1).strip()
+        numeric = re.match(r'(\d+)\s*$', value)
+        if numeric:
+            return int(numeric.group(1))
+        return value or None
+
+    @staticmethod
+    def _parse_labelled_field(text: str, label: str) -> Optional[str]:
+        """Read a wrapped `Label: value` field up to the next label or section."""
+        pattern = re.compile(
+            rf'^{label}\s*:\s*(.+?)(?=\n\s*(?:'
+            rf'Impulses|Motives|Difficulty|Thresholds?|Potential Adversaries|'
+            rf'ATK|Experience|FEATURES'
+            rf')\b|\Z)',
+            re.IGNORECASE | re.DOTALL | re.MULTILINE,
+        )
+        match = pattern.search(text)
+        if not match:
+            return None
+        return re.sub(r'\s*\n\s*', ' ', match.group(1)).strip()
+
+    def _parse_environment_features(self, block: _Block) -> list[EnvironmentFeature]:
+        """Parse features, attaching the GM prompts that follow each one.
+
+        Prompts are identified by their italic style where font information is
+        available. Otherwise every line is treated as description text.
+        """
+        body, questions_by_offset = self._split_feature_questions(block)
+
         features = []
-
-        # Find FEATURES section
-        features_start = text.upper().find('FEATURES')
-        if features_start == -1:
-            return features
-
-        features_text = text[features_start:]
-
-        # Skip the "FEATURES" header line itself
-        features_text = re.sub(r'^FEATURES\s*', '', features_text, flags=re.IGNORECASE)
-
-        # Collapse newlines to spaces so multi-line PDF text is treated as continuous
-        features_text = re.sub(r'\n', ' ', features_text)
-
-        # Pattern for feature entries: Name - Type: Description
-        # Feature names contain letters, digits, spaces, parens, quotes
-        # The colon after the type is required to anchor the match precisely
-        feature_pattern = r'([\w][\w\s()\"\']+?)\s*-\s*(Passive|Action|Reaction|Evolution):\s*(.+?)(?=[\w][\w\s()\"\']+?\s*-\s*(?:Passive|Action|Reaction|Evolution):|$)'
-
-        matches = re.findall(feature_pattern, features_text, re.IGNORECASE)
-
-        for name, ftype, desc in matches:
-            # Clean up the name and description
-            name = re.sub(r'\s+', ' ', name).strip()
-            desc = re.sub(r'\s+', ' ', desc).strip()
-
-            # Clean up name if it starts with non-alpha chars (artifacts from inline stat text)
-            name = re.sub(r'^[^A-Za-z]+', '', name).strip()
-
-            if name:
-                features.append(Feature(
-                    name=name,
-                    feature_type=ftype.strip().capitalize(),
-                    description=desc
-                ))
-
+        for name, ftype, desc, offset in self._iter_features(body):
+            features.append(EnvironmentFeature(
+                name=name,
+                feature_type=ftype,
+                description=desc,
+                questions=questions_by_offset.get(offset, []),
+            ))
         return features
+
+    def _split_feature_questions(
+        self, block: _Block
+    ) -> tuple[str, dict[int, list[str]]]:
+        """Separate question lines from feature body text.
+
+        Returns the body text with prompts removed, plus the prompts keyed by
+        the index of the feature they followed.
+        """
+        body_lines: list[str] = []
+        questions: dict[int, list[str]] = {}
+        pending: list[str] = []
+        feature_index = -1
+        feature_re = self._feature_heading_re()
+
+        for line in block.lines:
+            stripped = line.text.strip()
+            if line.style is LineStyle.QUESTION:
+                pending.append(stripped)
+                continue
+
+            if pending and stripped:
+                questions.setdefault(max(feature_index, 0), []).extend(
+                    self._join_questions(pending)
+                )
+                pending = []
+
+            if feature_re.match(stripped):
+                feature_index += 1
+
+            body_lines.append(line.text)
+
+        if pending:
+            questions.setdefault(max(feature_index, 0), []).extend(
+                self._join_questions(pending)
+            )
+
+        return '\n'.join(body_lines), questions
+
+    @staticmethod
+    def _join_questions(lines: list[str]) -> list[str]:
+        """Rejoin wrapped prompt lines and split them into questions."""
+        joined = re.sub(r'\s+', ' ', ' '.join(lines)).strip()
+        parts = re.findall(r'[^?]+\?', joined)
+        if not parts:
+            return [joined] if joined else []
+        return [part.strip() for part in parts if part.strip()]
+
+    @staticmethod
+    def _feature_heading_re() -> re.Pattern:
+        """Match a line that opens a feature: `Name - Type: description`.
+
+        Anchored to the start of a line because feature headings always begin
+        a paragraph. Matching against the whole block instead lets a name start
+        mid-sentence and absorb trailing damage text, turning
+        `...1d8+1 phy` + `Double Swipe - Action:` into a feature named
+        "phy Double Swipe". The permissive name class accepts the typographic
+        apostrophes and hyphens real names use ("Into the Spider's Web").
+        """
+        return re.compile(
+            r'^(?P<name>[^:]{1,70}?)\s+[-–—]\s+'
+            r'(?P<type>Passive|Action|Reaction|Evolution)\s*:\s*'
+            r'(?P<rest>.*)$',
+            re.IGNORECASE,
+        )
+
+    # ------------------------------------------------------------------
+    # Feature parsing shared by both record kinds
+    # ------------------------------------------------------------------
+
+    def _iter_features(self, text: str):
+        """Yield (name, type, description, index) for each feature in a block.
+
+        Walks lines from the FEATURES header, opening a new feature on each
+        heading line and folding every following line into its description.
+        """
+        lines = text.split('\n')
+
+        start = next(
+            (i for i, line in enumerate(lines) if line.strip().upper().startswith('FEATURES')),
+            None,
+        )
+        if start is None:
+            return
+
+        heading_re = self._feature_heading_re()
+        current: Optional[list] = None
+        index = 0
+
+        for line in lines[start:]:
+            stripped = re.sub(r'^FEATURES\s*', '', line.strip(), flags=re.IGNORECASE)
+
+            match = heading_re.match(stripped)
+            if match:
+                if current:
+                    yield self._finish_feature(current, index)
+                    index += 1
+                current = [
+                    match.group('name').strip(),
+                    match.group('type').strip().capitalize(),
+                    [match.group('rest').strip()],
+                ]
+            elif current is not None and stripped:
+                current[2].append(stripped)
+
+        if current:
+            yield self._finish_feature(current, index)
+
+    @staticmethod
+    def _finish_feature(current: list, index: int) -> tuple[str, str, str, int]:
+        name, ftype, desc_parts = current
+        description = re.sub(r'\s+', ' ', ' '.join(desc_parts)).strip()
+        return name, ftype, description, index
+
+    def _is_valid_environment(self, env: Optional[Environment]) -> bool:
+        """Return True when a parsed block has the minimum environment shape."""
+        if env is None:
+            return False
+        if not env.name or len(env.name) > 120:
+            return False
+        return all([
+            env.tier is not None,
+            env.environment_type,
+            env.difficulty is not None,
+            bool(env.features),
+        ])

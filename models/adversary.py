@@ -137,6 +137,11 @@ class Adversary:
     difficulty: Optional[int] = None
     threshold_minor: Optional[int] = None
     threshold_major: Optional[int] = None
+    # Exactly what the book printed, when it isn't a plain "minor/major" pair.
+    # Minions print "Thresholds: None", and adversaries destroyed at Major
+    # print a half pair such as "5/None" — both are real values rather than
+    # missing data, and neither survives as two integers.
+    thresholds_raw: Optional[str] = None
     hp: Optional[int] = None
     stress: Optional[int] = None
 
@@ -157,12 +162,14 @@ class Adversary:
 
     @property
     def thresholds_str(self) -> str:
-        """Return thresholds as 'minor/major' string."""
+        """Return thresholds as printed, e.g. '8/15', '5/None' or 'None'."""
         if self.threshold_minor is not None and self.threshold_major is not None:
             return f"{self.threshold_minor}/{self.threshold_major}"
-        elif self.threshold_minor is not None:
+        if self.thresholds_raw:
+            return self.thresholds_raw
+        if self.threshold_minor is not None:
             return f"{self.threshold_minor}/"
-        elif self.threshold_major is not None:
+        if self.threshold_major is not None:
             return f"/{self.threshold_major}"
         return ""
 
@@ -188,7 +195,11 @@ class Adversary:
             issues.append("Missing adversary type")
         if self.difficulty is None:
             issues.append("Missing Difficulty")
-        if self.threshold_minor is None and self.threshold_major is None:
+        if (
+            self.threshold_minor is None
+            and self.threshold_major is None
+            and not self.thresholds_raw
+        ):
             issues.append("Missing Thresholds")
         if self.hp is None:
             issues.append("Missing HP")
