@@ -295,5 +295,16 @@ class ConvertToFilesTests(unittest.TestCase):
             self.assertTrue(mock_convert.call_args.kwargs["frontmatter"])
 
 
+class WebOptionTests(unittest.TestCase):
+    def test_frontmatter_field_default_is_false(self):
+        from app import _is_truthy
+        fields = {}
+        self.assertFalse(_is_truthy(fields.get("frontmatter", "false")))
+
+    def test_frontmatter_field_true(self):
+        from app import _is_truthy
+        self.assertTrue(_is_truthy("true"))
+
+
 if __name__ == "__main__":
     unittest.main()

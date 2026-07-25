@@ -560,6 +560,7 @@ body::before {
         <label class="check-item"><input type="checkbox" id="opt-markdown" checked> <a href="https://community.obsidian.md/plugins/arroweds-adversary-bank" target="_blank" rel="noopener noreferrer">Arrowed's Adversary Bank Markdown</a></label>
         <label class="check-item"><input type="checkbox" id="opt-beastvault"> Combined JSON library</label>
         <label class="check-item"><input type="checkbox" id="opt-index"> Master Index</label>
+        <label class="check-item"><input type="checkbox" id="opt-frontmatter"> Obsidian properties (YAML frontmatter)</label>
       </div>
     </fieldset>
 
@@ -742,6 +743,7 @@ btnConvert.addEventListener('click', async () => {
       form.append('beastvault', $('#opt-beastvault').checked);
       form.append('index', $('#opt-index').checked);
       form.append('overwrite', $('#opt-overwrite').checked);
+      form.append('frontmatter', $('#opt-frontmatter').checked);
       res = await fetch('/api/convert', { method: 'POST', body: form });
     } else {
       res = await fetch('/api/convert', {
@@ -754,6 +756,7 @@ btnConvert.addEventListener('click', async () => {
           beastvault: $('#opt-beastvault').checked,
           index: $('#opt-index').checked,
           overwrite: $('#opt-overwrite').checked,
+          frontmatter: $('#opt-frontmatter').checked,
         }),
       });
     }

@@ -283,6 +283,7 @@ class ConverterHandler(BaseHTTPRequestHandler):
                 # but the key is preserved for API stability.
                 do_beastvault = _is_truthy(fields.get("beastvault", "false"))
                 do_index = _is_truthy(fields.get("index", "false"))
+                do_frontmatter = _is_truthy(fields.get("frontmatter", "false"))
 
                 if not do_markdown and not do_beastvault:
                     self._send_json({"success": False, "error": "Select at least one output format."}, status=400)
@@ -296,7 +297,8 @@ class ConverterHandler(BaseHTTPRequestHandler):
                     from convert import convert_to_files
                     written = convert_to_files(
                         result, output_dir,
-                        overwrite=overwrite, verbose=False
+                        overwrite=overwrite, verbose=False,
+                        frontmatter=do_frontmatter,
                     )
                     files_written = [
                         str(p.relative_to(output_dir)) for p in written.values()
