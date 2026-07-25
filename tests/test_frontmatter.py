@@ -231,5 +231,69 @@ class WriterFlagTests(unittest.TestCase):
             self.assertTrue(env_text.startswith("---\n"))
 
 
+class ConvertToFilesTests(unittest.TestCase):
+    def _result(self):
+        from models.parse_result import ParseResult
+        return ParseResult(
+            adversaries=[base_adversary()],
+            environments=[base_environment()],
+        )
+
+    def test_flag_off_writes_no_frontmatter(self):
+        import tempfile
+        from convert import convert_to_files
+        with tempfile.TemporaryDirectory() as tmp:
+            convert_to_files(self._result(), Path(tmp), overwrite=True, verbose=False)
+            text = (Path(tmp) / "Test_Goblin.md").read_text(encoding="utf-8")
+            self.assertTrue(text.startswith("# Test Goblin"))
+
+    def test_flag_on_writes_frontmatter_for_both_kinds(self):
+        import tempfile
+        from convert import convert_to_files
+        with tempfile.TemporaryDirectory() as tmp:
+            convert_to_files(
+                self._result(), Path(tmp),
+                overwrite=True, verbose=False, frontmatter=True,
+            )
+            adv_text = (Path(tmp) / "Test_Goblin.md").read_text(encoding="utf-8")
+            env_text = (
+                Path(tmp) / "environments" / "Test_Mine.md"
+            ).read_text(encoding="utf-8")
+            self.assertTrue(adv_text.startswith("---\n"))
+            self.assertTrue(env_text.startswith("---\n"))
+
+    def test_flag_on_with_readable_markdown(self):
+        import tempfile
+        from convert import convert_to_files
+        with tempfile.TemporaryDirectory() as tmp:
+            convert_to_files(
+                self._result(), Path(tmp),
+                overwrite=True, verbose=False,
+                readable_markdown=True, frontmatter=True,
+            )
+            text = (Path(tmp) / "Test_Goblin.md").read_text(encoding="utf-8")
+            self.assertTrue(text.startswith("---\n"))
+            self.assertIn("\n---\n# TEST GOBLIN", text)
+
+    def test_cli_flag_reaches_convert_to_files(self):
+        import tempfile
+        from unittest.mock import patch
+        import convert
+        from models.parse_result import ParseResult
+
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "src.md"
+            src.write_text("stub", encoding="utf-8")
+            argv = ["convert.py", str(src), "-o", str(Path(tmp) / "out"),
+                    "--frontmatter", "--quiet"]
+            with patch.object(convert, "parse_source",
+                              return_value=ParseResult(adversaries=[base_adversary()])), \
+                 patch.object(convert, "convert_to_files",
+                              return_value={}) as mock_convert, \
+                 patch.object(sys, "argv", argv):
+                convert.main()
+            self.assertTrue(mock_convert.call_args.kwargs["frontmatter"])
+
+
 if __name__ == "__main__":
     unittest.main()

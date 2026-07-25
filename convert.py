@@ -96,6 +96,7 @@ def convert_to_files(
     overwrite: bool = False,
     verbose: bool = True,
     readable_markdown: bool = False,
+    frontmatter: bool = False,
 ) -> dict[str, Path]:
     """Convert records to individual Markdown files.
 
@@ -103,13 +104,19 @@ def convert_to_files(
     library can point at either folder independently.
     """
     writer = MarkdownWriter if readable_markdown else AdversaryBankWriter
+    write_adv = lambda record, path: writer.write_adversary(
+        record, path, frontmatter=frontmatter
+    )
+    write_env = lambda record, path: writer.write_environment(
+        record, path, frontmatter=frontmatter
+    )
 
     if verbose:
         print(f"Writing {len(result.adversaries)} adversaries to {output_dir}")
         print()
 
     written = _write_records(
-        result.adversaries, output_dir, overwrite, verbose, writer.write_adversary
+        result.adversaries, output_dir, overwrite, verbose, write_adv
     )
 
     if result.environments:
@@ -122,7 +129,7 @@ def convert_to_files(
         # a name, and a plain update would drop one path even though both files
         # were written, under-reporting the file count.
         AdversaryBankWriter._merge_written(written, _write_records(
-            result.environments, env_dir, overwrite, verbose, writer.write_environment
+            result.environments, env_dir, overwrite, verbose, write_env
         ))
 
     return written
@@ -211,6 +218,14 @@ def main():
         ),
     )
     parser.add_argument(
+        '--frontmatter',
+        action='store_true',
+        help=(
+            "Prepend an Obsidian properties block (YAML frontmatter) to each "
+            "file, for use with Obsidian Bases"
+        ),
+    )
+    parser.add_argument(
         '--adversary-bank',
         nargs='?',
         const='adversaries.json',
@@ -289,6 +304,7 @@ def main():
             overwrite=args.overwrite,
             verbose=not args.quiet,
             readable_markdown=args.readable_markdown,
+            frontmatter=args.frontmatter,
         )
 
     # Generate index if requested
