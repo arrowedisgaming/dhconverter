@@ -768,7 +768,25 @@ btnConvert.addEventListener('click', async () => {
       renderConvertResults(data);
     }
   } catch (e) {
-    resultsDiv.innerHTML = `<div class="result-summary error">Request failed: ${esc(e.message)}</div>`;
+    // fetch throws TypeError when the request never reached a server. The raw
+    // "Failed to fetch" gives the user nothing to act on, and the two causes
+    // are both recoverable: the page was opened as a file instead of through
+    // the launcher, or the converter window was closed or restarted on one of
+    // the fallback ports while this tab still points at the old one.
+    let msg;
+    if (!(e instanceof TypeError)) {
+      msg = `Request failed: ${esc(e.message)}`;
+    } else if (location.protocol === 'file:') {
+      msg = 'This page was opened directly as a file, so it has no converter to talk to. '
+          + 'Close this tab and start the converter with <strong>Start Converter (Mac).command</strong> '
+          + '(or the Windows <strong>.bat</strong>), which opens the working page for you.';
+    } else {
+      msg = `Can't reach the converter at <strong>${esc(location.origin)}</strong>. `
+          + 'Its terminal window has most likely been closed. Start it again with the launcher, '
+          + 'then reload this page — and if the terminal reports a different address '
+          + '(it moves to the next free port when 8742 is busy), open that one instead.';
+    }
+    resultsDiv.innerHTML = `<div class="result-summary error">${msg}</div>`;
   } finally {
     btnConvert.disabled = false;
     btnConvert.innerHTML = 'Convert';
