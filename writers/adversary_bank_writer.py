@@ -5,8 +5,6 @@ code block that Arrow's Adversary Bank can scan from an Obsidian library folder.
 """
 from __future__ import annotations
 
-import json
-import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -14,23 +12,30 @@ from typing import Any
 try:
     from ..models.adversary import Adversary, Feature
     from ..models.environment import Environment, EnvironmentFeature
+    from . import yaml_format
 except ImportError:
     sys.path.insert(0, str(Path(__file__).parent.parent))
     from models.adversary import Adversary, Feature
     from models.environment import Environment, EnvironmentFeature
+    from writers import yaml_format
 
 
 # Environments are written to their own subfolder so an Obsidian library can
 # point at adversaries, environments, or both.
 ENVIRONMENT_SUBFOLDER = "environments"
 
-# DEL and the C1 control block. YAML rejects these outright, and json.dumps
-# leaves them literal when ensure_ascii is off.
-_YAML_FORBIDDEN_RE = re.compile(r"[\x7f-\x9f]")
-
 
 class AdversaryBankWriter:
     """Writer for Arrow's Adversary Bank-readable Markdown files."""
+
+    # Formatting helpers live in writers.yaml_format so the frontmatter
+    # module can share them; these aliases keep the old class-level API.
+    _set = staticmethod(yaml_format.set_field)
+    _format_attack = staticmethod(yaml_format.format_attack)
+    _yaml_scalar = staticmethod(yaml_format.yaml_scalar)
+    _yaml_lines = staticmethod(yaml_format.yaml_lines)
+    _yaml_dict_list_item = staticmethod(yaml_format.yaml_dict_list_item)
+    _display_name = staticmethod(yaml_format.display_name)
 
     @classmethod
     def write_adversary(cls, adversary: Adversary, output_path: Path) -> None:
@@ -207,23 +212,6 @@ class AdversaryBankWriter:
         return data
 
     @staticmethod
-    def _set(data: dict[str, Any], key: str, value: Any) -> None:
-        if value is None:
-            return
-        if isinstance(value, str) and value == "":
-            return
-        data[key] = value
-
-    @staticmethod
-    def _format_attack(modifier: str | None) -> int | str | None:
-        if modifier is None or modifier == "":
-            return None
-        try:
-            return int(modifier)
-        except ValueError:
-            return modifier
-
-    @staticmethod
     def _source_value(adv: Adversary) -> str:
         # Markdown blocks carry the human-readable source name + page so it
         # renders directly when the file is opened in Obsidian. The JSON
@@ -242,83 +230,3 @@ class AdversaryBankWriter:
         cls._set(data, "desc", feature.description)
         return data
 
-    @classmethod
-    def _yaml_lines(cls, data: dict[str, Any], indent: int = 0) -> list[str]:
-        lines: list[str] = []
-        pad = " " * indent
-
-        for key, value in data.items():
-            if isinstance(value, list):
-                # A bare "key:" parses back as null, not as an empty list.
-                if not value:
-                    lines.append(f"{pad}{key}: []")
-                    continue
-                lines.append(f"{pad}{key}:")
-                for item in value:
-                    if isinstance(item, dict):
-                        lines.extend(cls._yaml_dict_list_item(item, indent + 2))
-                    else:
-                        lines.append(f"{pad}  - {cls._yaml_scalar(item)}")
-            elif isinstance(value, dict):
-                if not value:
-                    lines.append(f"{pad}{key}: {{}}")
-                    continue
-                lines.append(f"{pad}{key}:")
-                lines.extend(cls._yaml_lines(value, indent + 2))
-            else:
-                lines.append(f"{pad}{key}: {cls._yaml_scalar(value)}")
-
-        return lines
-
-    @classmethod
-    def _yaml_dict_list_item(cls, data: dict[str, Any], indent: int) -> list[str]:
-        pad = " " * indent
-        lines: list[str] = []
-        first = True
-
-        for key, value in data.items():
-            prefix = "- " if first else "  "
-            first = False
-            if isinstance(value, list):
-                if not value:
-                    lines.append(f"{pad}{prefix}{key}: []")
-                    continue
-                lines.append(f"{pad}{prefix}{key}:")
-                for item in value:
-                    lines.append(f"{pad}    - {cls._yaml_scalar(item)}")
-            else:
-                lines.append(f"{pad}{prefix}{key}: {cls._yaml_scalar(value)}")
-
-        if first:
-            lines.append(f"{pad}- {{}}")
-
-        return lines
-
-    @staticmethod
-    def _yaml_scalar(value: Any) -> str:
-        if isinstance(value, bool):
-            return "true" if value else "false"
-        if isinstance(value, (int, float)):
-            return str(value)
-        encoded = json.dumps(str(value), ensure_ascii=False)
-        # json.dumps escapes C0 controls but passes DEL and the C1 block
-        # through literally. YAML forbids those, so a stray one makes the
-        # whole block unparseable. \u escapes are valid in a YAML
-        # double-quoted scalar, and non-ASCII text stays readable.
-        return _YAML_FORBIDDEN_RE.sub(
-            lambda match: "\\u%04x" % ord(match.group(0)), encoded
-        )
-
-    @classmethod
-    def _display_name(cls, name: str | None) -> str:
-        if not name:
-            return "Unknown"
-        return re.sub(
-            r"[A-Za-z]+(?:'[A-Za-z]+)?",
-            lambda match: cls._title_word(match.group(0)),
-            name,
-        )
-
-    @staticmethod
-    def _title_word(word: str) -> str:
-        return word[:1].upper() + word[1:].lower()
