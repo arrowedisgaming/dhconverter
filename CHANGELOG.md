@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Optional Obsidian properties block (YAML frontmatter) on every exported
+  adversary and environment file, for filtering with Obsidian Bases: new
+  `--frontmatter` CLI flag and a matching web UI checkbox. The frontmatter
+  `source` omits the page number so each book filters as a single source.
+
 ## [0.5] - 2026-07-24
 
 ### Fixed
