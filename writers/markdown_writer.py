@@ -18,10 +18,12 @@ from typing import Optional
 try:
     from ..models.adversary import Adversary, Feature
     from ..models.environment import Environment
+    from .frontmatter import adversary_frontmatter, environment_frontmatter
 except ImportError:
     sys.path.insert(0, str(Path(__file__).parent.parent))
     from models.adversary import Adversary, Feature
     from models.environment import Environment
+    from writers.frontmatter import adversary_frontmatter, environment_frontmatter
 
 
 class MarkdownWriter:
@@ -32,13 +34,14 @@ class MarkdownWriter:
     NEWLINE = "\n"
 
     @classmethod
-    def write_adversary(cls, adversary: Adversary, output_path: Path) -> None:
+    def write_adversary(cls, adversary: Adversary, output_path: Path,
+                        frontmatter: bool = False) -> None:
         """Write adversary to markdown file."""
-        content = cls.format_adversary(adversary)
+        content = cls.format_adversary(adversary, frontmatter=frontmatter)
         output_path.write_text(content, encoding='utf-8')
 
     @classmethod
-    def format_adversary(cls, adv: Adversary) -> str:
+    def format_adversary(cls, adv: Adversary, frontmatter: bool = False) -> str:
         """Format adversary as standardized markdown string."""
         lines = []
 
@@ -97,16 +100,20 @@ class MarkdownWriter:
             lines.append("")
 
         # Ensure file ends with newline
-        return "\n".join(lines)
+        body = "\n".join(lines)
+        if frontmatter:
+            return adversary_frontmatter(adv) + body
+        return body
 
     @classmethod
-    def write_environment(cls, environment: Environment, output_path: Path) -> None:
+    def write_environment(cls, environment: Environment, output_path: Path,
+                          frontmatter: bool = False) -> None:
         """Write environment to markdown file."""
-        content = cls.format_environment(environment)
+        content = cls.format_environment(environment, frontmatter=frontmatter)
         output_path.write_text(content, encoding='utf-8')
 
     @classmethod
-    def format_environment(cls, env: Environment) -> str:
+    def format_environment(cls, env: Environment, frontmatter: bool = False) -> str:
         """Format environment as standardized markdown string.
 
         Mirrors the adversary layout, swapping the combat stat block for the
@@ -151,7 +158,10 @@ class MarkdownWriter:
             lines.append(source_line)
             lines.append("")
 
-        return "\n".join(lines)
+        body = "\n".join(lines)
+        if frontmatter:
+            return environment_frontmatter(env) + body
+        return body
 
     @classmethod
     def _format_tier_line(cls, adv: Adversary) -> str:
@@ -208,7 +218,8 @@ class MarkdownWriter:
         cls,
         adversaries: list[Adversary],
         output_dir: Path,
-        overwrite: bool = False
+        overwrite: bool = False,
+        frontmatter: bool = False,
     ) -> dict[str, Path]:
         """Write multiple adversaries to individual files.
 
@@ -228,7 +239,7 @@ class MarkdownWriter:
                     output_path = output_dir / f"{adv.safe_filename()}_{i}.md"
                     i += 1
 
-            cls.write_adversary(adv, output_path)
+            cls.write_adversary(adv, output_path, frontmatter=frontmatter)
             written[adv.name] = output_path
 
         return written

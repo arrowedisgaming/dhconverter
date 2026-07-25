@@ -13,11 +13,13 @@ try:
     from ..models.adversary import Adversary, Feature
     from ..models.environment import Environment, EnvironmentFeature
     from . import yaml_format
+    from .frontmatter import adversary_frontmatter, environment_frontmatter
 except ImportError:
     sys.path.insert(0, str(Path(__file__).parent.parent))
     from models.adversary import Adversary, Feature
     from models.environment import Environment, EnvironmentFeature
     from writers import yaml_format
+    from writers.frontmatter import adversary_frontmatter, environment_frontmatter
 
 
 # Environments are written to their own subfolder so an Obsidian library can
@@ -38,13 +40,15 @@ class AdversaryBankWriter:
     _display_name = staticmethod(yaml_format.display_name)
 
     @classmethod
-    def write_adversary(cls, adversary: Adversary, output_path: Path) -> None:
-        content = cls.format_adversary(adversary)
+    def write_adversary(cls, adversary: Adversary, output_path: Path,
+                        frontmatter: bool = False) -> None:
+        content = cls.format_adversary(adversary, frontmatter=frontmatter)
         output_path.write_text(content, encoding="utf-8")
 
     @classmethod
-    def write_environment(cls, environment: Environment, output_path: Path) -> None:
-        content = cls.format_environment(environment)
+    def write_environment(cls, environment: Environment, output_path: Path,
+                          frontmatter: bool = False) -> None:
+        content = cls.format_environment(environment, frontmatter=frontmatter)
         output_path.write_text(content, encoding="utf-8")
 
     @classmethod
@@ -54,11 +58,16 @@ class AdversaryBankWriter:
         output_dir: Path,
         overwrite: bool = False,
         environments: list[Environment] | None = None,
+        frontmatter: bool = False,
     ) -> dict[str, Path]:
         """Write adversaries to ``output_dir`` and environments beneath it."""
-        written = cls._write_records(
-            adversaries, output_dir, overwrite, cls.write_adversary
+        write_adv = lambda record, path: cls.write_adversary(
+            record, path, frontmatter=frontmatter
         )
+        write_env = lambda record, path: cls.write_environment(
+            record, path, frontmatter=frontmatter
+        )
+        written = cls._write_records(adversaries, output_dir, overwrite, write_adv)
 
         if environments:
             # Merged rather than updated: an adversary and an environment can
@@ -68,7 +77,7 @@ class AdversaryBankWriter:
                 environments,
                 output_dir / ENVIRONMENT_SUBFOLDER,
                 overwrite,
-                cls.write_environment,
+                write_env,
             ))
 
         return written
@@ -90,11 +99,13 @@ class AdversaryBankWriter:
         environments: list[Environment],
         output_dir: Path,
         overwrite: bool = False,
+        frontmatter: bool = False,
     ) -> dict[str, Path]:
         """Write environments into ``output_dir`` itself."""
-        return cls._write_records(
-            environments, output_dir, overwrite, cls.write_environment
+        write_env = lambda record, path: cls.write_environment(
+            record, path, frontmatter=frontmatter
         )
+        return cls._write_records(environments, output_dir, overwrite, write_env)
 
     @classmethod
     def _write_records(cls, records, output_dir: Path, overwrite: bool, write) -> dict[str, Path]:
@@ -126,7 +137,7 @@ class AdversaryBankWriter:
         return written
 
     @classmethod
-    def format_adversary(cls, adv: Adversary) -> str:
+    def format_adversary(cls, adv: Adversary, frontmatter: bool = False) -> str:
         display_name = cls._display_name(adv.name)
         lines = [
             f"# {display_name}",
@@ -135,10 +146,13 @@ class AdversaryBankWriter:
         ]
         lines.extend(cls._yaml_lines(cls._to_data(adv)))
         lines.extend(["```", ""])
-        return "\n".join(lines)
+        body = "\n".join(lines)
+        if frontmatter:
+            return adversary_frontmatter(adv) + body
+        return body
 
     @classmethod
-    def format_environment(cls, env: Environment) -> str:
+    def format_environment(cls, env: Environment, frontmatter: bool = False) -> str:
         display_name = cls._display_name(env.name)
         lines = [
             f"# {display_name}",
@@ -147,7 +161,10 @@ class AdversaryBankWriter:
         ]
         lines.extend(cls._yaml_lines(cls._environment_to_data(env)))
         lines.extend(["```", ""])
-        return "\n".join(lines)
+        body = "\n".join(lines)
+        if frontmatter:
+            return environment_frontmatter(env) + body
+        return body
 
     @classmethod
     def _environment_to_data(cls, env: Environment) -> dict[str, Any]:

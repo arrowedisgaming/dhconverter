@@ -13,7 +13,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from models.adversary import Adversary, Attack, Feature
 from models.environment import Environment, EnvironmentFeature
+from writers.adversary_bank_writer import AdversaryBankWriter
 from writers.frontmatter import adversary_frontmatter, environment_frontmatter
+from writers.markdown_writer import MarkdownWriter
 
 
 def base_adversary(**overrides) -> Adversary:
@@ -163,6 +165,70 @@ class EnvironmentFrontmatterTests(unittest.TestCase):
         block = environment_frontmatter(base_environment())
         self.assertEqual(json.loads(scalar_for(block, "source")), "Hope and Fear")
         self.assertNotIn("p. 39", block)
+
+
+class WriterFlagTests(unittest.TestCase):
+    def test_bank_writer_flag_off_output_unchanged(self):
+        adv = base_adversary()
+        self.assertEqual(
+            AdversaryBankWriter.format_adversary(adv),
+            AdversaryBankWriter.format_adversary(adv, frontmatter=False),
+        )
+        self.assertTrue(
+            AdversaryBankWriter.format_adversary(adv).startswith("# Test Goblin")
+        )
+
+    def test_bank_writer_flag_on_prepends_block(self):
+        adv = base_adversary()
+        output = AdversaryBankWriter.format_adversary(adv, frontmatter=True)
+        self.assertEqual(
+            output,
+            adversary_frontmatter(adv) + AdversaryBankWriter.format_adversary(adv),
+        )
+        self.assertTrue(output.startswith("---\n"))
+        self.assertIn("\n---\n# Test Goblin", output)
+        self.assertIn("```daggerheart", output)
+
+    def test_bank_writer_environment_flag_on(self):
+        env = base_environment()
+        output = AdversaryBankWriter.format_environment(env, frontmatter=True)
+        self.assertEqual(
+            output,
+            environment_frontmatter(env) + AdversaryBankWriter.format_environment(env),
+        )
+
+    def test_markdown_writer_flag_on_prepends_block(self):
+        adv = base_adversary()
+        output = MarkdownWriter.format_adversary(adv, frontmatter=True)
+        self.assertEqual(
+            output,
+            adversary_frontmatter(adv) + MarkdownWriter.format_adversary(adv),
+        )
+        self.assertIn("\n---\n# TEST GOBLIN", output)
+
+    def test_markdown_writer_environment_flag_on(self):
+        env = base_environment()
+        output = MarkdownWriter.format_environment(env, frontmatter=True)
+        self.assertEqual(
+            output,
+            environment_frontmatter(env) + MarkdownWriter.format_environment(env),
+        )
+
+    def test_write_multiple_threads_flag(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            AdversaryBankWriter.write_multiple(
+                [base_adversary()], Path(tmp),
+                overwrite=True,
+                environments=[base_environment()],
+                frontmatter=True,
+            )
+            adv_text = (Path(tmp) / "Test_Goblin.md").read_text(encoding="utf-8")
+            env_text = (
+                Path(tmp) / "environments" / "Test_Mine.md"
+            ).read_text(encoding="utf-8")
+            self.assertTrue(adv_text.startswith("---\n"))
+            self.assertTrue(env_text.startswith("---\n"))
 
 
 if __name__ == "__main__":
