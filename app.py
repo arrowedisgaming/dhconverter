@@ -28,6 +28,7 @@ MAX_BODY_SIZE = 60 * 1024 * 1024
 # Add project root to sys.path so imports work
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from convert import no_records_message
 from models.adversary import Adversary
 from models.parse_result import ParseResult
 from parsers.md_parser import MDParser
@@ -261,7 +262,9 @@ class ConverterHandler(BaseHTTPRequestHandler):
                 if not result:
                     self._send_json({
                         "success": False,
-                        "error": "No adversaries or environments found in source file.",
+                        "error": no_records_message(result),
+                        "blocks_detected": result.blocks_detected,
+                        "unparsed_blocks": result.rejected,
                     })
                     return
 
@@ -341,6 +344,11 @@ class ConverterHandler(BaseHTTPRequestHandler):
                     summary_parts.append(f"{len(files_written)} files written to {output_dir_str}.")
                 if issues_count:
                     summary_parts.append(f"{issues_count} have validation warnings.")
+                if result.rejected:
+                    summary_parts.append(
+                        f"{len(result.rejected)} of {result.blocks_detected} stat "
+                        f"blocks could not be parsed."
+                    )
 
                 self._send_json({
                     "success": True,
@@ -349,6 +357,7 @@ class ConverterHandler(BaseHTTPRequestHandler):
                     "files_written": files_written,
                     "beastvault_file": beastvault_file,
                     "validation_warnings": warnings,
+                    "unparsed_blocks": result.rejected,
                     "summary": " ".join(summary_parts),
                 })
 

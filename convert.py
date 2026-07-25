@@ -48,6 +48,24 @@ def parse_source(source_path: Path) -> ParseResult:
         sys.exit(1)
 
 
+def no_records_message(result: ParseResult) -> str:
+    """Explain an empty parse in terms of what the parser actually saw.
+
+    A bare "nothing found" reads the same whether the file holds no stat blocks
+    or holds hundreds the parser could not read, which is what made issue #2
+    hard to report. Saying how many blocks were recognised separates the two.
+    """
+    if not result.rejected:
+        return "No adversaries or environments found in source file."
+
+    return (
+        f"No adversaries or environments could be parsed, though "
+        f"{result.blocks_detected} stat blocks were found. The source may use a "
+        f"layout this converter does not recognise yet. First few:\n"
+        + "\n".join(f"  - {description}" for description in result.rejected[:5])
+    )
+
+
 def list_adversaries(result: ParseResult) -> None:
     """Print a list of adversaries and environments found."""
     print(f"Found {len(result.adversaries)} adversaries:")
@@ -219,13 +237,21 @@ def main():
     result = parse_source(args.source)
 
     if not result:
-        print("No adversaries or environments found in source file.")
+        print(no_records_message(result), file=sys.stderr)
         sys.exit(0)
 
     print(f"Found {len(result.adversaries)} adversaries", end="")
     if result.environments:
         print(f" and {len(result.environments)} environments", end="")
     print()
+    if result.rejected:
+        print(
+            f"{len(result.rejected)} of {result.blocks_detected} stat blocks "
+            f"could not be parsed:",
+            file=sys.stderr,
+        )
+        for description in result.rejected:
+            print(f"  - {description}", file=sys.stderr)
     print()
 
     # List mode

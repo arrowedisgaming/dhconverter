@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5] - 2026-07-24
+
+### Fixed
+
+- Books that set the difficulty on the tier line — `Tier 1 Skulk; Difficulty 12` rather than `Tier 1 Skulk` alone — extracted **zero** records. Every stat block is anchored on its tier line, and the pattern was anchored to end after the type keyword, so no line matched, no blocks were found, and nothing parsed. The tier line now accepts a trailing clause shaped like a stat rather than a sentence — at most two words before a number — so `; Difficulty 12` opens a block while a wrapped line of prose such as `Tier 1 Solo, such animals hunt alone.` does not. Fixes [#2](https://github.com/arrowedisgaming/dhconverter/issues/2).
+- The minion and horde parenthetical is read on either side of the type keyword. Books print both `Tier 4 Horde (10/HP)` and `Tier 1 (10/HP) Horde`; only the first was recognised, so a block written the other way was not merely lost — its lines fell inside the block above it, which then reported a stranger's features as its own. Either order now reads as `Horde (10/HP)`, so one book does not sort differently from another.
+- Stat blocks that run across a page break no longer lose everything after the break. Blocks were split and parsed strictly per page, so a book whose blocks flow continuously — rather than starting each one at the top of a column, as the official releases do — lost the FEATURES section, and often HP and Stress with it, of roughly a quarter of its blocks. Those blocks then failed validation and were discarded. A block that reaches the foot of its page is now held back and joined to the lines continuing it at the head of the next, stopping at a section header. A following page that opens no block of its own is joined only on positive evidence — the block does not yet parse without it, or the page opens mid-sentence or on a feature heading — so an index or credits page is not read into the last feature of a block that was already complete. The carry never spans a second break.
+- `Experience` no longer swallows the rest of the stat block. Its value was read through to the FEATURES header, which is equivalent only in books that print Experience last; in books that print it above the combat stats the field captured Thresholds, HP, Stress and the attack line as well. It now stops at the next labelled field, using the same `_field_value` helper the environment fields already use.
+- A labelled field left empty in the source (a bare `Experience:` for an adversary with none) is reported as missing instead of borrowing the value of the field below it.
+- A field value no longer ends inside an ordinary word. The label that terminates a value was matched without a word boundary, so `Impulses: Cause distress: panic` stopped at `Cause di` — `Stress:` matched inside `distress:`. The truncated record still validated, so this corrupted output silently.
+- Weapon lines that separate the range from the damage with a pipe (`Bite: Melee | 1d8+2 phy`) are now parsed; only the dashed form was recognised, so books using the pipe throughout lost every attack. Books that inline the modifier in that line (`Bite: Melee | ATK: +1 | 1d8+2 phy`) keep the weapon name and range, which the previous reading discarded, and that modifier now outranks any `ATK:` quoted elsewhere in the block.
+- pdfminer's `Could not get FontBBox from font descriptor...` warning no longer reaches the console. A missing font bounding box does not affect text extraction, but the warning was the only line a user saw in the converter window, making a successful run look like a crash — it is what [#2](https://github.com/arrowedisgaming/dhconverter/issues/2) was filed about, while the real failure was silent. Only that one message is dropped; pdfminer's other warnings do explain bad output and still surface.
+
+### Added
+
+- Stat blocks that are recognised but cannot be parsed are now reported instead of silently dropped. The CLI lists them on stderr, the web app returns them as `blocks_detected` and `unparsed_blocks` and names the count in its summary, and a parse that yields nothing at all says how many blocks it saw rather than "No adversaries or environments found" — which read identically whether a file held no stat blocks or hundreds in an unsupported layout.
+- `tests/test_assortment_integration.py` — end-to-end coverage against a third-party book, which exercises the layout variations the official releases happen not to use. Skips unless the source PDF is present, since `docs/` is git-ignored.
+
 ## [0.4.1] - 2026-07-22
 
 ### Fixed

@@ -4,6 +4,7 @@ Text extraction (columns, line grouping, glyph decoding) lives in
 :mod:`parsers.pdf_text`; this module turns the resulting lines into stat-block
 records.
 """
+import logging
 import re
 import sys
 from dataclasses import dataclass, field
@@ -14,6 +15,29 @@ try:
     import pdfplumber
 except ImportError:
     pdfplumber = None
+
+# pdfminer warns about fonts that declare no usable FontBBox. The bounding box
+# is irrelevant to text extraction, so the run is unaffected — but the warning
+# reaches stderr through logging's default handler, and in the converter's
+# console window it is the only line a user sees. Issue #2 was filed quoting it
+# as the error, when the real failure was a parse that quietly found nothing.
+#
+# Only this one message is dropped. Silencing the whole pdfminer logger would
+# also hide warnings that do explain bad output — decompression data loss,
+# invalid page boxes, malformed font widths — which is the opposite of what
+# this change is for.
+def _drop_font_bbox_warning(record: logging.LogRecord) -> bool:
+    return "FontBBox" not in record.getMessage()
+
+
+_pdffont_logger = logging.getLogger("pdfminer.pdffont")
+# Matched by name rather than identity so reloading this module replaces the
+# filter instead of stacking another copy of it.
+if not any(
+    getattr(existing, "__name__", None) == _drop_font_bbox_warning.__name__
+    for existing in _pdffont_logger.filters
+):
+    _pdffont_logger.addFilter(_drop_font_bbox_warning)
 
 # Handle imports for both module and direct execution
 try:
@@ -55,6 +79,11 @@ class _Block:
     page_number: int
     section: Optional[str] = None  # "ADVERSARIES" | "ENVIRONMENTS" | None
     section_tier: Optional[int] = None
+    # Index of the block's first line within its page, and whether the block
+    # runs to the last line of that page. Together they tell the page loop
+    # which lines belong to a block continued from the previous page.
+    start: int = 0
+    reaches_page_end: bool = False
 
     @property
     def text(self) -> str:
@@ -76,6 +105,12 @@ class PDFParser:
         r'^TIER\s+(\d+)\s+(ADVERSARIES|ENVIRONMENTS)\b',
         re.IGNORECASE,
     )
+
+    # The attack ranges, and the weapon line that carries one: `Long Knife:
+    # Melee - 2d6+6 phy`. Books separate the range from the damage with either
+    # a dash or a pipe, the same way feature headings vary their dash.
+    _RANGE = r'(?:Melee|Very Close|Close|Far|Very Far)'
+    _WEAPON_LINE = rf'[^:\n]+:\s*{_RANGE}\s*[-|]\s*'
 
     def __init__(self):
         if pdfplumber is None:
@@ -148,31 +183,125 @@ class PDFParser:
     # ------------------------------------------------------------------
 
     def _parse_pages(self, pages: list[PageInput], source_name: str) -> ParseResult:
-        """Parse styled or plain-text pages into records."""
+        """Parse styled or plain-text pages into records.
+
+        A block that runs to the foot of its page is held back rather than
+        parsed there, so the lines continuing it at the head of the next page
+        can be joined on first. Books that start every block at the top of a
+        column never need this; books whose blocks flow continuously would
+        otherwise lose whatever falls after the page break — usually the whole
+        FEATURES section, which then fails validation and is discarded.
+        """
         result = ParseResult()
         section: Optional[str] = None
         section_tier: Optional[int] = None
+        pending: Optional[_Block] = None
 
         for page in pages:
             page = self._coerce_page(page)
+            blocks = self._split_into_blocks(page, section, section_tier)
 
-            for block in self._split_into_blocks(page, section, section_tier):
+            if pending is not None:
+                pending.lines = pending.lines + self._continuation_lines(
+                    page, blocks, pending
+                )
+                self._collect(result, pending, source_name)
+                pending = None
+
+            for index, block in enumerate(blocks):
                 section = block.section
                 section_tier = block.section_tier
 
-                record = self._parse_block(block)
-                if record is None:
-                    continue
-                record.source_name = source_name
-                record.source_page = page.page_number
-                if isinstance(record, Environment):
-                    result.environments.append(record)
+                # Only the last block of a page can continue onto the next, and
+                # only when nothing (such as a section header) closed it early.
+                if index == len(blocks) - 1 and block.reaches_page_end:
+                    pending = block
                 else:
-                    result.adversaries.append(record)
+                    self._collect(result, block, source_name)
 
             section, section_tier = self._trailing_section(page, section, section_tier)
 
+        if pending is not None:
+            self._collect(result, pending, source_name)
+
         return result
+
+    def _continuation_lines(
+        self, page: PageText, blocks: list[_Block], pending: _Block
+    ) -> list[PageLine]:
+        """Return the lines of ``page`` that continue ``pending`` from the page before.
+
+        Everything ahead of the first block on the page continues the previous
+        one, stopping at a section header — which belongs to neither block, the
+        same rule :meth:`_split_into_blocks` applies within a page.
+
+        A page that opens no block of its own is bounded by nothing, so it is
+        carried only on positive evidence that it continues the block: either
+        ``pending`` does not yet parse without it, or the page opens mid-
+        sentence or on a feature heading. A long stat block really can fill the
+        next page with nothing but its FEATURES section — but so can an index
+        or a credits page, and reading one of those into a block that was
+        already complete appends the whole page to its last feature.
+
+        The carry never spans a second page break. No source has needed it, and
+        each further page carried blind is another chance to swallow one whole.
+        """
+        if blocks:
+            end = blocks[0].start
+        elif self._continues_a_block(page, pending):
+            end = len(page.lines)
+        else:
+            return []
+        for index, line in enumerate(page.lines[:end]):
+            if self.SECTION_RE.match(line.text.strip()):
+                return page.lines[:index]
+        return page.lines[:end]
+
+    def _continues_a_block(self, page: PageText, pending: _Block) -> bool:
+        """True when a page opening no block of its own belongs to ``pending``.
+
+        Three signals, any of which is enough. The block does not stand up
+        without more lines; or the page opens mid-sentence, which only running
+        text does; or it opens on a feature heading, which is how a block whose
+        stats are already complete spills its last features over the break.
+        A page of front matter shows none of them — it opens on a heading, in
+        the middle of nothing.
+        """
+        if self._parse_block(pending) is None:
+            return True
+
+        opening = next((line.text.strip() for line in page.lines if line.text.strip()), "")
+        if not opening:
+            return False
+
+        if opening[0].islower():
+            return True
+        return bool(
+            self._feature_heading_re().match(opening)
+            or opening.upper().startswith('FEATURES')
+        )
+
+    def _collect(self, result: ParseResult, block: _Block, source_name: str) -> None:
+        """Parse a block into ``result``, recording it when it cannot be parsed."""
+        record = self._parse_block(block)
+        if record is None:
+            result.rejected.append(self._describe_block(block))
+            return
+
+        record.source_name = source_name
+        record.source_page = block.page_number
+        if isinstance(record, Environment):
+            result.environments.append(record)
+        else:
+            result.adversaries.append(record)
+
+    @staticmethod
+    def _describe_block(block: _Block) -> str:
+        """Name an unparsed block by its opening lines, for the parse report."""
+        opening = [line.text.strip() for line in block.lines if line.text.strip()]
+        return f"p{block.page_number}: {' / '.join(opening[:2])}" if opening else (
+            f"p{block.page_number}: (empty)"
+        )
 
     def _parse_adversaries_from_pages(
         self, pages: list[PageInput], source_name: str
@@ -201,9 +330,23 @@ class PDFParser:
         return section, section_tier
 
     def _tier_line_re(self) -> re.Pattern:
+        """Match a block's tier line: `Tier 2 Skulk`, `Tier 4 Horde (10/HP)`.
+
+        Books that set the difficulty on the tier line rather than with the
+        other stats print `Tier 1 Skulk; Difficulty 12`, so the line is allowed
+        to carry a trailing clause. The clause has the shape of a stat and not
+        of a sentence: at most two words before a number. "; Difficulty 12"
+        qualifies; ", such animals hunt alone." and "; it attacks for 4" do
+        not. Admitting any text after the separator let a wrapped line of prose
+        open a block and take the line above it as the name.
+
+        The minion/horde parenthetical is accepted on either side of the type
+        keyword, since books print both `Horde (10/HP)` and `(10/HP) Horde`.
+        """
         keywords = '|'.join(re.escape(t) for t in self.ADVERSARY_TYPES)
         return re.compile(
-            rf'^Tier\s+(\d+)?\s*({keywords})(\s*\([^)]*\))?\s*$',
+            rf'^Tier\s+(\d+)?\s*(?:\([^)]*\)\s*)?({keywords})(\s*\([^)]*\))?'
+            rf'\s*(?:[;,]\s*(?:[A-Za-z]+\s*[;,]?\s*){{0,2}}:?\s*\d+\s*\.?)?\s*$',
             re.IGNORECASE,
         )
 
@@ -260,6 +403,8 @@ class PDFParser:
                     page_number=page.page_number,
                     section=block_section,
                     section_tier=block_tier,
+                    start=start,
+                    reaches_page_end=end == len(lines),
                 ))
 
         return blocks
@@ -410,15 +555,22 @@ class PDFParser:
 
     @staticmethod
     def _parse_tier_line(text: str) -> tuple[Optional[int], Optional[str]]:
-        """Read tier number and type keyword from a block's tier line."""
+        """Read tier number and type keyword from a block's tier line.
+
+        The minion/horde parenthetical is printed on either side of the keyword
+        depending on the book; either way the type reads as `Horde (10/HP)`, so
+        one source does not sort differently from another.
+        """
         match = re.search(
-            r'Tier\s+(\d+)?\s*(\w+(?:\s*\([^)]+\))?)',
+            r'Tier\s+(\d+)?\s*(?:(\([^)]*\))\s*)?(\w+)(?:\s*(\([^)]+\)))?',
             text, re.IGNORECASE
         )
         if not match:
             return None, None
         tier = int(match.group(1)) if match.group(1) else None
-        return tier, match.group(2)
+        parenthetical = match.group(2) or match.group(4)
+        type_name = match.group(3)
+        return tier, f"{type_name} {parenthetical}" if parenthetical else type_name
 
     # ------------------------------------------------------------------
     # Adversary parsing
@@ -485,6 +637,11 @@ class PDFParser:
         # sentence, while the spelled-out "Attack" must carry a colon. Without
         # that, prose sharing a line with the real label ("Attack when
         # cornered. ATK: +2 | ...") matched first and swallowed it.
+        #
+        # A label that sits *after* a weapon line's range ("Bite: Melee | ATK:
+        # +1 | 1d6+2 phy") is skipped, because reading forward from it keeps
+        # only the modifier and damage and throws the weapon name and range
+        # away. That whole line parses correctly as a weapon line instead.
         payload = next(
             (
                 match.group(1).strip()
@@ -493,7 +650,7 @@ class PDFParser:
                     text,
                     re.IGNORECASE,
                 )
-                if '|' in match.group(1)
+                if '|' in match.group(1) and not self._follows_weapon_range(text, match)
             ),
             None,
         )
@@ -515,13 +672,11 @@ class PDFParser:
         else:
             self._parse_age_style_attack(adv, text)
 
-        # Experience
-        exp_match = re.search(
-            r'Experience[:\s]+(.+?)(?:FEATURES|$)',
-            text, re.IGNORECASE | re.DOTALL
-        )
-        if exp_match:
-            adv.experience = exp_match.group(1).strip()
+        # Experience runs to the next labelled field, not to FEATURES. Books
+        # that print it last make the two equivalent; books that print it
+        # before the combat stats do not, and reading to FEATURES swallowed
+        # Thresholds, HP, Stress and the attack into the experience text.
+        adv.experience = self._field_value(text, 'Experience')
 
     @staticmethod
     def _parse_thresholds(adv: Adversary, text: str) -> None:
@@ -552,6 +707,12 @@ class PDFParser:
             adv.threshold_minor = int(legacy.group(1))
             adv.threshold_major = int(legacy.group(2))
 
+    @classmethod
+    def _follows_weapon_range(cls, text: str, match: re.Match) -> bool:
+        """True when an `ATK:` label is preceded on its line by a weapon range."""
+        line_start = text.rfind('\n', 0, match.start()) + 1
+        return bool(re.match(cls._WEAPON_LINE, text[line_start:match.start()], re.IGNORECASE))
+
     @staticmethod
     def _select_age_style_modifier(text: str) -> Optional[re.Match]:
         """Pick the `ATK:` that belongs to the stat line, not one quoted in prose.
@@ -578,9 +739,8 @@ class PDFParser:
 
     def _parse_age_style_attack(self, adv: Adversary, text: str) -> None:
         """Parse lines like `Long Knife: Melee - 2d6+6 phy` plus a separate ATK line."""
-        range_pattern = r'(?:Melee|Very Close|Close|Far|Very Far)'
         weapon_match = re.search(
-            rf'^([^:\n]+):\s*({range_pattern})\s*-\s*(.+?)(?:\s+Thresholds?:|\n|$)',
+            rf'^([^:\n]+):\s*({self._RANGE})\s*[-|]\s*(.+?)(?:\s+Thresholds?:|\n|$)',
             text,
             re.IGNORECASE | re.MULTILINE,
         )
@@ -596,6 +756,21 @@ class PDFParser:
         if damage.lower().startswith("threshold"):
             damage = ""
 
+        # Some books run the modifier inside the weapon line rather than on a
+        # line of its own: `Bite: Melee | ATK: +1 | 1d6+2 phy`. The label and
+        # its value are not part of the damage. A modifier printed on the
+        # weapon line outranks anything found elsewhere in the block, since
+        # that search falls back to any `ATK:` in the text and can land on one
+        # quoted in a description.
+        inline_modifier = re.match(
+            r'ATK\s*:?\s*([+\-−]?\d+(?:d\d+(?:[+\-−]\d+)?)?)\s*\|\s*',
+            damage,
+            re.IGNORECASE,
+        )
+        if inline_modifier:
+            modifier = inline_modifier.group(1).strip().replace('−', '-')
+            damage = damage[inline_modifier.end():].strip()
+
         adv.attack = Attack(
             modifier=modifier,
             weapon_name=weapon_match.group(1).strip(),
@@ -605,10 +780,9 @@ class PDFParser:
 
     def _parse_pdf_motives(self, adv: Adversary, text: str) -> None:
         """Parse motives without swallowing following stat or attack lines."""
-        range_pattern = r'(?:Melee|Very Close|Close|Far|Very Far)'
         motives_match = re.search(
             rf'Motives\s*(?:&|and)\s*Tactics[:\s]+(.+?)(?=\n(?:'
-            rf'Thresholds?:|[^\n:]+:\s*{range_pattern}\s*-|ATK:|Difficulty:|Experience:|FEATURES'
+            rf'Thresholds?:|{self._WEAPON_LINE}|ATK:|Difficulty:|Experience:|FEATURES'
             rf')|$)',
             text,
             re.IGNORECASE | re.DOTALL,
@@ -696,7 +870,7 @@ class PDFParser:
 
             if stop_re.match(stripped):
                 break
-            if re.match(r'^[^:\n]+:\s*(?:Melee|Very Close|Close|Far|Very Far)\s*-', stripped, re.IGNORECASE):
+            if re.match(self._WEAPON_LINE, stripped, re.IGNORECASE):
                 break
 
             if re.match(r'^Description:', stripped, re.IGNORECASE):
@@ -754,7 +928,7 @@ class PDFParser:
     _FIELD_LABELS = (
         r'Impulses', r'Motives\s*(?:&|and)\s*Tactics', r'Motives',
         r'Difficulty', r'Thresholds?', r'Potential\s+Adversaries',
-        r'ATK', r'Attack', r'Experience',
+        r'ATK', r'Attack', r'Experience', r'HP', r'Stress',
     )
 
     @classmethod
@@ -763,11 +937,20 @@ class PDFParser:
 
         The value runs until the next known label or the FEATURES section,
         whichever comes first, on the same line or a later one.
+
+        The value may be empty, and is then reported as missing rather than
+        borrowed from the field below: sources do print a bare "Experience:"
+        for an adversary that has none, and requiring at least one character
+        made the field swallow the next line's label and value whole.
         """
         next_label = '|'.join(cls._FIELD_LABELS)
+        # The next label must start on a word boundary. Without one the short
+        # labels match inside ordinary words — "Impulses: Cause distress:
+        # panic" ended the value at "Cause di", because "Stress:" matched
+        # inside "distress:".
         pattern = re.compile(
-            rf'\b{label}\s*:\s*(.+?)'
-            rf'(?=\s*(?:{next_label})\s*:|\s*\bFEATURES\b|\Z)',
+            rf'\b{label}\s*:\s*(.*?)'
+            rf'(?=\s*\b(?:{next_label})\s*:|\s*\bFEATURES\b|\Z)',
             re.IGNORECASE | re.DOTALL,
         )
         match = pattern.search(text)
