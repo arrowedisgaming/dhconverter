@@ -17,8 +17,8 @@ Everything runs on your own machine. Nothing is uploaded anywhere.
 7. Your files appear in `output/web-convert`.
 
 **Leave the terminal window open while you work.** It *is* the converter — closing it stops the
-server, and the page will tell you it can't reach it. If port 8742 is already busy the launcher
-moves to the next free port and prints the address it actually used; open that one.
+server, and the page will tell you it can't reach it. If port 8742 is already busy the server tries
+the next three and prints the address it actually used; open that one.
 
 ### The options in the web page
 
@@ -31,9 +31,11 @@ moves to the next free port and prints the address it actually used; open that o
 | **Obsidian properties (YAML frontmatter)** | Adds a properties block to the top of every file so [Obsidian Bases](https://help.obsidian.md/bases) can filter and sort them. See [Obsidian properties](#obsidian-properties-for-bases). |
 | **Overwrite existing files** | Replace files already in the output folder. When unchecked, repeat conversions are written alongside as `Name_1.md`, `Name_2.md`, and so on. |
 
-The **Existing Sources** tab lists files you have placed in the project's `sources/` folder, so you
-can reconvert a book without dragging it in again. You supply your own source files; none ship with
-this tool.
+The **Existing Sources** tab is a shortcut for a handful of known books. It only lists files whose
+names match entries in `SOURCE_CONFIGS` (in `utils/source_finder.py`) *and* that are present in the
+project's `sources/` folder — dropping an arbitrary file there will not make it appear. For anything
+else, use **Upload File**, which accepts any `.pdf` or `.md`. You supply your own source files; none
+ship with this tool.
 
 ## Use the output in Obsidian
 
@@ -114,7 +116,7 @@ Linux, or `.venv\Scripts\python.exe` on Windows.
 | `--report` | Print a validation report of missing or suspect fields, writing nothing. |
 | `--quiet`, `-q` | Don't print a line per file. |
 | `--readable-markdown` | Write the older human-readable stat blocks instead of `daggerheart` code blocks. |
-| `--adversary-bank [FILE]` | Also export a combined JSON library (default `adversaries.json` in the output folder). |
+| `--adversary-bank [FILE]` | Also export a combined JSON library. Defaults to `adversaries.json` in the `-o` folder, or the current directory if no `-o` was given. |
 | `--beastvault [FILE]` | Deprecated alias for `--adversary-bank`. |
 
 Examples:

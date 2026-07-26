@@ -9,9 +9,10 @@ import json
 import re
 from typing import Any
 
-# DEL and the C1 control block. YAML rejects these outright, and json.dumps
-# leaves them literal when ensure_ascii is off.
-_YAML_FORBIDDEN_RE = re.compile(r"[\x7f-\x9f]")
+# DEL, the C1 control block, and the two noncharacters YAML excludes from its
+# printable set. json.dumps leaves all of these literal when ensure_ascii is
+# off, and a single stray one makes the whole block unparseable.
+_YAML_FORBIDDEN_RE = re.compile(r"[\x7f-\x9f￾￿]")
 
 
 def set_field(data: dict[str, Any], key: str, value: Any) -> None:

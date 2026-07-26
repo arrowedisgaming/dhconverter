@@ -11,6 +11,7 @@ Usage:
 """
 from __future__ import annotations
 
+import errno
 import json
 import os
 import sys
@@ -24,6 +25,12 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 # Maximum request body size (60 MB). Full-book PDFs run large — the Hope & Fear
 # adversaries chapter alone is ~57 MB before multipart encoding overhead.
 MAX_BODY_SIZE = 60 * 1024 * 1024
+
+# "Address already in use", across platforms. errno.EADDRINUSE is 48 on macOS
+# and 98 on Linux; Windows raises the WinSock code 10048, which Python does not
+# always translate. Matching only one of these makes a busy port fatal on the
+# other platforms instead of falling through to the next port.
+_ADDR_IN_USE = {errno.EADDRINUSE, 48, 98, 10048}
 
 # Add project root to sys.path so imports work
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -483,7 +490,7 @@ def main():
             port = try_port
             break
         except OSError as e:
-            if e.errno == 48:  # Address already in use
+            if e.errno in _ADDR_IN_USE:
                 print(f"Port {try_port} is in use, trying next...")
                 continue
             raise

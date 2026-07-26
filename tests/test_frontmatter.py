@@ -127,6 +127,19 @@ class AdversaryFrontmatterTests(unittest.TestCase):
         block = adversary_frontmatter(base_adversary())
         self.assertEqual(scalar_for(block, "attack"), "2")
 
+    def test_yaml_forbidden_characters_are_escaped(self):
+        # DEL, a C1 control, and the two noncharacters YAML excludes from its
+        # printable set. Emitted literally, any one of them makes the block
+        # unparseable for a standards-compliant YAML reader.
+        adv = base_adversary(description="a\x7fb\x9fc￾d￿e")
+        block = adversary_frontmatter(adv)
+        for forbidden in ("\x7f", "\x9f", "￾", "￿"):
+            self.assertNotIn(forbidden, block)
+        self.assertEqual(
+            json.loads(scalar_for(block, "desc")),
+            "a\x7fb\x9fc￾d￿e",
+        )
+
     def test_special_characters_stay_json_quoted(self):
         adv = base_adversary(
             name="WILL-O'-THE-WISP",

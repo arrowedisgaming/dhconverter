@@ -733,6 +733,7 @@ btnConvert.addEventListener('click', async () => {
   resultsSection.classList.remove('hidden');
   resultsDiv.innerHTML = '';
 
+  let serverReplied = false;
   try {
     let res;
     if (selectedFile) {
@@ -761,6 +762,8 @@ btnConvert.addEventListener('click', async () => {
       });
     }
 
+    serverReplied = true;
+
     const data = await res.json();
     if (!res.ok) {
       renderConvertResults({ success: false, error: data.error || `Server error (${res.status})` });
@@ -768,13 +771,13 @@ btnConvert.addEventListener('click', async () => {
       renderConvertResults(data);
     }
   } catch (e) {
-    // fetch throws TypeError when the request never reached a server. The raw
-    // "Failed to fetch" gives the user nothing to act on, and the two causes
-    // are both recoverable: the page was opened as a file instead of through
-    // the launcher, or the converter window was closed or restarted on one of
-    // the fallback ports while this tab still points at the old one.
+    // fetch rejects when the request never reached a server. The raw "Failed to
+    // fetch" gives the user nothing to act on, and both causes are recoverable:
+    // the page was opened as a file rather than through the launcher, or the
+    // converter window was closed. serverReplied keeps a failure thrown while
+    // parsing or rendering a real response from being blamed on the network.
     let msg;
-    if (!(e instanceof TypeError)) {
+    if (serverReplied) {
       msg = `Request failed: ${esc(e.message)}`;
     } else if (location.protocol === 'file:') {
       msg = 'This page was opened directly as a file, so it has no converter to talk to. '
@@ -783,8 +786,7 @@ btnConvert.addEventListener('click', async () => {
     } else {
       msg = `Can't reach the converter at <strong>${esc(location.origin)}</strong>. `
           + 'Its terminal window has most likely been closed. Start it again with the launcher, '
-          + 'then reload this page — and if the terminal reports a different address '
-          + '(it moves to the next free port when 8742 is busy), open that one instead.';
+          + 'then reload this page. If the terminal reports a different address, open that one instead.';
     }
     resultsDiv.innerHTML = `<div class="result-summary error">${msg}</div>`;
   } finally {
