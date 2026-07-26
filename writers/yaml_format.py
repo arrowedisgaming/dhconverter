@@ -99,15 +99,47 @@ def yaml_dict_list_item(data: dict[str, Any], indent: int) -> list[str]:
     return lines
 
 
+# Apostrophe variants that sit inside a word. Books typeset the possessive as
+# U+2019 rather than the ASCII quote; matching only the latter split
+# "Archmage’s" into two words and capitalised the tail as "Archmage’S". This
+# affects display text only; filenames are built separately by
+# ``models/naming.py``, which drops apostrophes altogether.
+_APOSTROPHES = "'‘’ʼ`´"
+
+_APOSTROPHE_CLASS = f"[{re.escape(_APOSTROPHES)}]"
+
+# A word may carry more than one apostrophe — "O'Connor's" is both a name
+# element and a possessive — so the segment repeats.
+_WORD_RE = re.compile(rf"[A-Za-z]+(?:{_APOSTROPHE_CLASS}[A-Za-z]+)*")
+
+_APOSTROPHE_SPLIT_RE = re.compile(f"({_APOSTROPHE_CLASS})")
+
+# Endings that stay lowercase after an apostrophe. Anything longer is a name
+# element rather than a contraction — "O'Connor", "D'Artagnan" — and keeps its
+# capital, so the rule cannot be "lowercase whatever follows an apostrophe".
+_CONTRACTION_ENDINGS = frozenset({"s", "t", "d", "m", "ll", "re", "ve"})
+
+
 def display_name(name: str | None) -> str:
     if not name:
         return "Unknown"
-    return re.sub(
-        r"[A-Za-z]+(?:'[A-Za-z]+)?",
-        lambda match: _title_word(match.group(0)),
-        name,
-    )
+    return _WORD_RE.sub(lambda match: _title_word(match.group(0)), name)
 
 
 def _title_word(word: str) -> str:
+    # Alternates segment, apostrophe, segment, ... so the separators are the
+    # odd indices and the segments after the first are the even ones.
+    parts = _APOSTROPHE_SPLIT_RE.split(word)
+
+    cased = [_capitalize(parts[0])]
+    for apostrophe, segment in zip(parts[1::2], parts[2::2]):
+        if segment.lower() in _CONTRACTION_ENDINGS:
+            cased.append(f"{apostrophe}{segment.lower()}")
+        else:
+            cased.append(f"{apostrophe}{_capitalize(segment)}")
+
+    return "".join(cased)
+
+
+def _capitalize(word: str) -> str:
     return word[:1].upper() + word[1:].lower()

@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-07-26
+
+### Fixed
+
+- A possessive no longer capitalises its own "s". Books typeset the apostrophe as U+2019 rather than the ASCII quote, and the title-casing pattern recognised only the latter, so `ARCHMAGE’S TOWER` was cased as two separate words and emitted as `Archmage’S Tower` — in the properties block, the heading, and the `daggerheart` code block alike. The straight quote, both curly quotes, the modifier letter apostrophe, the backtick and the acute accent are now all read as sitting inside a word. Only contraction and possessive endings drop their capital, so a name element keeps one: `O’Connor` does not become `O’connor`, and a word carrying both reads as `O’Connor’s`. Affects `Alchemist’s Abandoned Workshop`, `Archmage’s Tower`, `Dragon’s Lair`, `Necromancer’s Ossuary`, and `Witch’s Hut`. Filenames are unchanged, since they strip apostrophes already.
+
 ## [0.7] - 2026-07-26
 
 ### Fixed

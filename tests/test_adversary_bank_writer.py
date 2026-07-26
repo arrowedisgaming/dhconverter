@@ -86,6 +86,45 @@ class StructureTests(unittest.TestCase):
         self.assertIn("# God-King", output)
         self.assertEqual(json.loads(scalar_for(body, "name")), "God-King")
 
+    def test_keeps_a_possessive_lowercase_after_a_typographic_apostrophe(self):
+        # Books typeset the apostrophe as U+2019, which the casing pattern did
+        # not recognise, so "Archmage’s" split into two words and the trailing
+        # "s" was capitalised: "Archmage’S Tower".
+        output = AdversaryBankWriter.format_adversary(
+            base_adversary(name="ARCHMAGE’S TOWER")
+        )
+        body = yaml_body(output)
+
+        self.assertIn("# Archmage’s Tower", output)
+        self.assertEqual(json.loads(scalar_for(body, "name")), "Archmage’s Tower")
+
+    def test_keeps_a_possessive_lowercase_after_an_ascii_apostrophe(self):
+        output = AdversaryBankWriter.format_adversary(
+            base_adversary(name="ALCHEMIST'S ABANDONED WORKSHOP")
+        )
+        body = yaml_body(output)
+
+        self.assertIn("# Alchemist's Abandoned Workshop", output)
+        self.assertEqual(
+            json.loads(scalar_for(body, "name")), "Alchemist's Abandoned Workshop"
+        )
+
+    def test_capitalises_a_name_element_after_an_apostrophe(self):
+        # Only contraction endings drop their capital; "O'Connor" is a name.
+        output = AdversaryBankWriter.format_adversary(base_adversary(name="O’CONNOR"))
+
+        self.assertIn("# O’Connor", output)
+
+    def test_cases_both_halves_of_a_possessive_name_element(self):
+        # Two apostrophes in one word: the name element keeps its capital and
+        # the possessive still loses one. Matching a single apostrophe segment
+        # left the tail as its own word — "O’Connor’S Keep".
+        output = AdversaryBankWriter.format_adversary(
+            base_adversary(name="O’CONNOR’S KEEP")
+        )
+
+        self.assertIn("# O’Connor’s Keep", output)
+
     def test_write_adversary_creates_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "goblin.md"
