@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7] - 2026-07-26
+
+### Fixed
+
+- The official Daggerheart SRD converted to almost nothing usable: of 51 stat blocks it reported, 18 failed outright and the 30 records it did produce were corrupt, carrying names like `Motives & Tactics: Arrest, close gates,` and `DEEPROOT DEFENDER GIANT RAT`. The SRD is the only book in the line that ships as landscape two-page spreads — 1224x792, two 612x792 book pages side by side — so it holds four columns where every other book holds two. Column detection split a page exactly once, at the widest gap near its centre, which on a spread is the fold between the two book pages; each book page's own two columns were left merged, so every visual line joined text from both. A landscape page is now halved at the fold first, and the existing column detection runs within each half, where it sees the same 612x792 geometry it was built for. The SRD now yields 129 adversaries and 19 environments with nothing rejected and no validation warnings. Output for every other book is byte-for-byte unchanged.
+- Stat blocks were silently lost on spread pages whose columns sit too close to measure. Column detection needs a gap of at least 3% of the width it is dividing, but a prose-dense half leaves almost no whitespace between the last word of one column and the first of the next — 9pt on SRD page 52, against an 18.4pt threshold — so the half never split and its columns merged. Nothing was reported: the merged lines formed no recognisable tier line, so the blocks were not counted as rejected either, and three Tier 1 environments simply vanished. A half whose gap cannot be measured is now divided at its midpoint, which is where the gutter sits on a fixed two-column grid. The measurement is still preferred where it works — dividing every half geometrically instead costs two stat blocks elsewhere in the book.
+- An adversary whose name ends in "tier" no longer loses its type. The tier line was located by searching the whole block rather than its lines, so `COURTIER` supplied a "TIER", the line break after it satisfied the separator, and the word `Tier` beginning the line below was read as the type — leaving the SRD's Courtier as a `Tier` rather than a `Social`. The search is now anchored to the start of a line.
+- A section header that wraps no longer prepends itself to the next block's name. The SRD sets headings such as `TIER 3 ADVERSARIES (LEVELS 5-7)` across two lines, and the orphaned `(LEVELS 5-7)` is set in the same face as a block name, so five records converted as `(Levels 5-7) Adult Flickerfly` and the like. A bare level range is now recognised as the tail of a section header.
+
+### Added
+
+- `tests/test_srd_integration.py` — end-to-end coverage against the official SRD, the only supported book with a landscape two-page-spread layout. Skips unless the source PDF is present, since `docs/` is git-ignored.
+
+### Changed
+
+- The README's list of supported layouts now names landscape two-page spreads.
+
 ## [0.6] - 2026-07-25
 
 ### Added
