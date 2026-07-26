@@ -18,3 +18,6 @@ output/
 .omc/
 *.bak
 docs/
+
+# Local session notes (never committed)
+SESSION_NOTES.md

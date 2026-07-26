@@ -152,6 +152,101 @@ class PageTextTests(unittest.TestCase):
         self.assertFalse(PageLine("Tier 1 Skulk", LineStyle.TIER).is_dropped())
 
 
+class SpreadColumnTests(unittest.TestCase):
+    """The SRD ships as landscape two-page spreads, so it holds four columns.
+
+    Every other book is a portrait single page with two. Splitting only at the
+    widest gap finds the spread gutter and stops, leaving each book page's two
+    columns merged into one line: "COURTIER GIANT MOSQUITOES".
+    """
+
+    # A 1224x792 spread: two 612pt book pages, two ~230pt columns on each.
+    COLUMN_X0 = (40.0, 330.0, 652.0, 942.0)
+
+    @classmethod
+    def spread_words(cls):
+        """One heading per column, all four sharing a baseline."""
+        names = ("COURTIER", "GIANT", "DEEPROOT", "RAT")
+        return [
+            word(name, x0, x0 + 60.0, 100.0, size=12.0,
+                 fontname="ABCDEF+EvelethCleanRegular")
+            for name, x0 in zip(names, cls.COLUMN_X0)
+        ]
+
+    def test_spread_is_split_into_four_columns(self):
+        columns = PDFTextExtractor()._detect_columns(self.spread_words(), 1224.0, 792.0)
+
+        self.assertEqual(len(columns), 4)
+
+    def test_headings_on_one_baseline_stay_separate(self):
+        extractor = PDFTextExtractor()
+
+        lines = [
+            line
+            for column in extractor._detect_columns(self.spread_words(), 1224.0, 792.0)
+            for line in extractor._group_words_into_lines(column)
+        ]
+
+        self.assertEqual(
+            [line.text for line in lines],
+            ["COURTIER", "GIANT", "DEEPROOT", "RAT"],
+        )
+
+    def test_a_spread_half_splits_even_when_its_gutter_is_narrow(self):
+        """SRD page 52 loses three environments without this.
+
+        A prose-dense half leaves almost no whitespace between the last word
+        start of one column and the first of the next: the widest central gap
+        measures 9pt on that page against an 18.4pt threshold, so the half
+        never splits and its two columns merge line by line. Worse, the widest
+        gap sits at x=417 rather than the real gutter at x=306, so relaxing the
+        threshold would split in the wrong place. The book page geometry is
+        fixed, so the half's midpoint is the reliable answer.
+        """
+        # x0 positions 15pt apart throughout, below the 18.4pt split threshold.
+        body = [
+            word("lorem", x0, x0 + 12.0, 200.0)
+            for start in (40.0, 652.0)
+            for x0 in [start + 15.0 * n for n in range(35)]
+        ]
+        headings = [
+            word(name, x0, x0 + 60.0, 100.0, size=12.0,
+                 fontname="ABCDEF+EvelethCleanRegular")
+            for name, x0 in zip(
+                ("ABANDONED", "AMBUSHED", "AMBUSHERS", "CULT"),
+                (40.0, 310.0, 652.0, 922.0),
+            )
+        ]
+
+        extractor = PDFTextExtractor()
+        columns = extractor._detect_columns(body + headings, 1224.0, 792.0)
+
+        self.assertEqual(len(columns), 4)
+
+        heading_lines = [
+            line.text
+            for column in columns
+            for line in extractor._group_words_into_lines(column)
+            if line.style is LineStyle.HEADING
+        ]
+        self.assertEqual(
+            heading_lines, ["ABANDONED", "AMBUSHED", "AMBUSHERS", "CULT"]
+        )
+
+    def test_portrait_pages_keep_their_two_columns(self):
+        """Guards the six portrait books: their intra-column gaps must not split."""
+        words = [
+            word("COURTIER", 40.0, 100.0, 100.0),
+            # A 33pt gap inside the left column, as seen on martialadversaries p3.
+            word("Melee", 133.0, 180.0, 100.0),
+            word("DEEPROOT", 330.0, 390.0, 100.0),
+        ]
+
+        columns = PDFTextExtractor()._detect_columns(words, 612.0, 792.0)
+
+        self.assertEqual(len(columns), 2)
+
+
 class VisibleWordTests(unittest.TestCase):
     """Some pages park duplicate stat blocks outside the page box."""
 

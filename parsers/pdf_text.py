@@ -228,7 +228,7 @@ class PDFTextExtractor:
             return PageText.from_text(page_number, raw).ensure_cleaned()
 
         lines: list[PageLine] = []
-        for column in self._detect_columns(words, page.width):
+        for column in self._detect_columns(words, page.width, page.height):
             # Cleanup runs per column: a hyphen-broken word must never be
             # joined across the gutter to the top of the next column.
             lines.extend(clean_page_lines(self._group_words_into_lines(column)))
@@ -258,17 +258,89 @@ class PDFTextExtractor:
 
         return visible
 
-    def _detect_columns(self, words: list[dict], page_width: float) -> list[list[dict]]:
-        """Split words into columns at the widest gap near the page centre."""
+    def _detect_columns(
+        self, words: list[dict], page_width: float, page_height: float
+    ) -> list[list[dict]]:
+        """Split words into columns, honouring two-page spreads.
+
+        A landscape page is a spread: two book pages printed side by side, each
+        carrying its own columns. The SRD is the only book in the line that
+        ships this way — every other one is a portrait single page.
+
+        Splitting at the single widest gap finds the spread gutter and stops,
+        which leaves each book page's two columns merged into one line
+        ("COURTIER GIANT MOSQUITOES"). Halving the spread first and detecting
+        columns within each half gives each half the exact 612x792 geometry the
+        gap thresholds were tuned against.
+
+        The halving is keyed on page shape rather than on gap widths because
+        intra-column gaps in the portrait books reach 0.26 of the column span —
+        far above the 0.03 split threshold — so recursively re-splitting every
+        column would tear those books apart.
+        """
         if not words:
             return []
 
+        if page_width <= page_height:
+            return self._split_at_widest_gap(words, 0.0, page_width)
+
+        # No word straddles the fold on any spread page, so the geometric
+        # midpoint divides the two book pages without cutting one in half.
+        fold = page_width / 2
+        halves = (
+            [w for w in words if w["x0"] < fold],
+            [w for w in words if w["x0"] >= fold],
+        )
+
+        columns: list[list[dict]] = []
+        for half, (low, high) in zip(halves, ((0.0, fold), (fold, page_width))):
+            if not half:
+                continue
+            split = self._split_at_widest_gap(half, low, high)
+            if len(split) == 1:
+                split = self._split_at_midpoint(half, low, high)
+            columns.extend(split)
+
+        return columns or [words]
+
+    @staticmethod
+    def _split_at_midpoint(
+        words: list[dict], low: float, high: float
+    ) -> list[list[dict]]:
+        """Divide a spread half down the middle, ignoring the gap measurement.
+
+        Prose-dense halves leave almost no whitespace between the last word
+        start of one column and the first of the next — 9pt on SRD page 52,
+        against an 18.4pt threshold — so the gap test finds nothing and the
+        half's two columns merge line by line, silently losing the stat blocks
+        that straddle them. Relaxing the threshold does not help: on that page
+        the widest gap sits at x=417 rather than the real gutter at x=306.
+
+        Every book page in a spread is the same width with the same two-column
+        grid, so its midpoint is the gutter whenever the measurement fails.
+        This is a fallback rather than the rule because the measurement is the
+        better signal when it does fire: splitting every half geometrically
+        instead costs two stat blocks elsewhere in the book.
+        """
+        midpoint = (low + high) / 2
+        left = [w for w in words if w["x0"] < midpoint]
+        right = [w for w in words if w["x0"] >= midpoint]
+
+        columns = [col for col in (left, right) if col]
+        return columns if len(columns) > 1 else [words]
+
+    @staticmethod
+    def _split_at_widest_gap(
+        words: list[dict], low: float, high: float
+    ) -> list[list[dict]]:
+        """Split one page region into columns at its widest central gap."""
         x_positions = sorted({round(w["x0"]) for w in words})
 
-        center_zone_start = page_width * 0.2
-        center_zone_end = page_width * 0.8
+        span = high - low
+        center_zone_start = low + span * 0.2
+        center_zone_end = low + span * 0.8
         best_gap = 0.0
-        best_split = page_width / 2
+        best_split = low + span / 2
 
         for left, right in zip(x_positions, x_positions[1:]):
             gap = right - left
@@ -277,7 +349,7 @@ class PDFTextExtractor:
                 best_gap = gap
                 best_split = gap_center
 
-        if best_gap < page_width * 0.03:
+        if best_gap < span * 0.03:
             return [words]
 
         left_col = [w for w in words if w["x0"] < best_split]

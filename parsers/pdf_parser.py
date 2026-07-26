@@ -106,6 +106,14 @@ class PDFParser:
         re.IGNORECASE,
     )
 
+    # The level range of a section header, when the header wraps and leaves it
+    # alone on the next line. It is set in the same heading font as a block
+    # name, so without this it reads as one: "(Levels 5-7) Adult Flickerfly".
+    SECTION_LEVELS_RE = re.compile(
+        r'^\(LEVELS?\s+\d+\s*(?:[-–—]\s*\d+)?\s*\)$',
+        re.IGNORECASE,
+    )
+
     # The attack ranges, and the weapon line that carries one: `Long Knife:
     # Melee - 2d6+6 phy`. Books separate the range from the damage with either
     # a dash or a pipe, the same way feature headings vary their dash.
@@ -427,7 +435,10 @@ class PDFParser:
                 line = lines[i]
                 if line.style is not LineStyle.HEADING:
                     break
-                if self.SECTION_RE.match(line.text.strip()):
+                stripped = line.text.strip()
+                if self.SECTION_RE.match(stripped):
+                    break
+                if self.SECTION_LEVELS_RE.match(stripped):
                     break
                 start = i
                 i -= 1
@@ -560,10 +571,15 @@ class PDFParser:
         The minion/horde parenthetical is printed on either side of the keyword
         depending on the book; either way the type reads as `Horde (10/HP)`, so
         one source does not sort differently from another.
+
+        The match is anchored to the start of a line because a name ending in
+        "tier" otherwise shadows the real tier line: "COURTIER" supplies the
+        "TIER", the newline after it satisfies the separator, and the word
+        "Tier" on the line below reads as the type, giving `(None, "Tier")`.
         """
         match = re.search(
-            r'Tier\s+(\d+)?\s*(?:(\([^)]*\))\s*)?(\w+)(?:\s*(\([^)]+\)))?',
-            text, re.IGNORECASE
+            r'^[ \t]*Tier\s+(\d+)?\s*(?:(\([^)]*\))\s*)?(\w+)(?:\s*(\([^)]+\)))?',
+            text, re.IGNORECASE | re.MULTILINE
         )
         if not match:
             return None, None

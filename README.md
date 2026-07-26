@@ -196,8 +196,9 @@ py -3 -m venv .venv
 
 ## What it handles
 
-- Adversary and environment stat blocks from PDFs, including two-column layouts, blocks that run
-  across a page break, and books that print the difficulty on the tier line.
+- Adversary and environment stat blocks from PDFs, including two-column layouts, landscape
+  two-page spreads such as the official SRD, blocks that run across a page break, and books that
+  print the difficulty on the tier line.
 - Multi-adversary Markdown files in both community and standardized formats.
 - Environments as their own record type, keeping Impulses, Potential Adversaries, and each feature's
   GM question prompts.

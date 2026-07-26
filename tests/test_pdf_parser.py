@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from models.adversary import Adversary
 from models.environment import Environment
 from parsers.pdf_parser import PDFParser
-from parsers.pdf_text import PageText
+from parsers.pdf_text import LineStyle, PageLine, PageText
 
 
 def parser_without_pdfplumber() -> PDFParser:
@@ -575,6 +575,30 @@ class ThirdPartyLayoutTests(unittest.TestCase):
         self.assertEqual(
             PDFParser._parse_tier_line("Tier 4 Horde (10/HP); Difficulty 20"),
             (4, "Horde (10/HP)"),
+        )
+
+    def test_a_wrapped_section_header_is_not_read_as_part_of_the_name(self):
+        # The SRD sets "TIER 3 ADVERSARIES (LEVELS 5-7)" over two heading lines.
+        # SECTION_RE matches only the first, so the walk up from the tier line
+        # stopped one line too high and produced "(Levels 5-7) Adult Flickerfly".
+        lines = [
+            PageLine("TIER 3 ADVERSARIES", LineStyle.HEADING),
+            PageLine("(LEVELS 5-7)", LineStyle.HEADING),
+            PageLine("ADULT FLICKERFLY", LineStyle.HEADING),
+            PageLine("Tier 3 Solo", LineStyle.TIER),
+        ]
+
+        start = parser_without_pdfplumber()._find_name_start(lines, 3)
+
+        self.assertEqual(start, 2)
+
+    def test_a_name_ending_in_tier_does_not_shadow_the_tier_line(self):
+        # "COURTIER" ends with "TIER", so an unanchored search matched the tail
+        # of the name, took the newline as its separator, and read the word
+        # "Tier" below it as the type: (None, "Tier") instead of (1, "Social").
+        self.assertEqual(
+            PDFParser._parse_tier_line("COURTIER\nTier 1 Social\nAn ambitious socialite."),
+            (1, "Social"),
         )
 
     def test_a_complete_block_still_takes_a_page_that_continues_mid_sentence(self):
