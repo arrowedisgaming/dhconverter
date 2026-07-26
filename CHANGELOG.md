@@ -6,12 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6] - 2026-07-25
+
 ### Added
 
-- Optional Obsidian properties block (YAML frontmatter) on every exported
-  adversary and environment file, for filtering with Obsidian Bases: new
-  `--frontmatter` CLI flag and a matching web UI checkbox. The frontmatter
-  `source` omits the page number so each book filters as a single source.
+- Optional Obsidian properties block (YAML frontmatter) on every exported adversary and environment file, for filtering and sorting with [Obsidian Bases](https://help.obsidian.md/bases): a new `--frontmatter` CLI flag and a matching web UI checkbox, off by default. The properties block carries the filterable stats — tier, type, difficulty, HP, Stress, the attack line, motives, description, source, and a feature count — while the `daggerheart` code block below it is untouched, so Arrow's Adversary Bank keeps reading files exactly as before. The frontmatter `source` names the book alone, without the page number: with pages included a single book appears in a Base as dozens of separate sources (`Undead Adversaries, page 16`, `page 17`, and so on) instead of one value worth filtering on. Environments get the fields that suit them, `impulses` and `potential_adversaries` in place of the combat stats.
+- The web page now explains what to do when it cannot reach the converter, instead of reporting the browser's bare "Failed to fetch". It distinguishes the two recoverable causes: the page was opened as a file rather than through the launcher, or the converter's terminal window has been closed.
+
+### Fixed
+
+- The web server no longer dies on Windows or Linux when its port is already in use. It falls back to the next three ports, but recognised "address already in use" only by the macOS error number, so on the other platforms — including the Windows launcher the README advertises — a second instance terminated instead of moving to a free port.
+- Two characters YAML excludes from its printable set, U+FFFE and U+FFFF, are now escaped in generated files. Emitted literally, either one made the whole block unparseable for a standards-compliant YAML reader.
+
+### Changed
+
+- The README is reorganised around the web UI, which most people use: the launcher steps come first, every checkbox is explained, and the CLI reference now documents every flag of `convert.py`, `normalize.py`, `app.py`, and `generate_adversaries_html.py` with worked examples. It also corrects two long-standing inaccuracies — the Existing Sources tab lists only a fixed set of known books rather than anything placed in `sources/`, and `--adversary-bank` without an output directory writes its JSON to the current directory.
 
 ## [0.5] - 2026-07-24
 
